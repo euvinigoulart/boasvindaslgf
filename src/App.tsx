@@ -52,55 +52,22 @@ export default function App() {
   const [newServiceCapacity, setNewServiceCapacity] = useState(10);
   const [newServiceDesc, setNewServiceDesc] = useState('');
 
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
   const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     fetchData();
-    setupWebSocket();
+    
+    // Set up polling every 5 seconds for faster updates
+    const interval = setInterval(() => {
+      fetchData(true); // silent fetch
+    }, 5000);
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
+      clearInterval(interval);
     };
   }, []);
-
-  const setupWebSocket = () => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(`${protocol}//${window.location.host}`);
-    socketRef.current = socket;
-
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'VOLUNTEER_ADDED') {
-        setVolunteers((prev) => {
-          if (prev.find(v => v.id === data.payload.id)) return prev;
-          return [data.payload, ...prev];
-        });
-        toast.success(`${data.payload.name} entrou na lista!`, { icon: '🙌' });
-      } else if (data.type === 'VOLUNTEER_REMOVED') {
-        setVolunteers((prev) => prev.filter((v) => v.id !== data.payload.id));
-      } else if (data.type === 'SERVICE_ADDED') {
-        setServices((prev) => {
-          if (prev.find(s => s.id === data.payload.id)) return prev;
-          return [...prev, data.payload].sort((a, b) => a.date.localeCompare(b.date));
-        });
-      } else if (data.type === 'SERVICE_UPDATED') {
-        setServices((prev) => prev.map(s => 
-          s.id === data.payload.id 
-            ? { ...s, capacity: data.payload.capacity } 
-            : s
-        ));
-      } else if (data.type === 'SERVICE_REMOVED') {
-        setServices((prev) => prev.filter((s) => s.id !== data.payload.id));
-        if (selectedServiceId === data.payload.id) setSelectedServiceId(null);
-      }
-    };
-
-    socket.onclose = () => {
-      setTimeout(setupWebSocket, 3000);
-    };
-  };
 
   const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpVNXgp958nk6iJUrBzNSY-Wf2wsm2fbaP8D8n4OtbEO4ljT7BtHz_XGXG--bdo_Gl/exec';
 
@@ -145,23 +112,24 @@ export default function App() {
     }
   };
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const servicesData = await fetchFromScript('getServices');
       const volunteersData = await fetchFromScript('getVolunteers');
       
       setServices(servicesData);
       setVolunteers(volunteersData);
+      setLastUpdated(new Date());
       
       if (servicesData.length > 0 && !selectedServiceId) {
         setSelectedServiceId(servicesData[0].id);
       }
     } catch (error: any) {
       console.error('Erro no fetchData:', error);
-      toast.error('Erro ao conectar com a planilha. Verifique se o Script está publicado como "Qualquer pessoa".');
+      if (!silent) toast.error('Erro ao conectar com a planilha. Verifique se o Script está publicado como "Qualquer pessoa".');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -301,7 +269,9 @@ export default function App() {
             className="flex items-center gap-2 bg-emerald-500/20 backdrop-blur-sm px-3 py-1 rounded-full border border-emerald-500/30 mb-4"
           >
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-400">Sincronizado em tempo real</span>
+            <span className="text-[10px] uppercase tracking-widest font-bold text-emerald-400">
+              Sincronizado: {format(lastUpdated, "HH:mm:ss")}
+            </span>
           </motion.div>
 
           <div className="flex flex-col items-center justify-center gap-4">
