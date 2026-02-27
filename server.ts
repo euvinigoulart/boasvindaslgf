@@ -2,70 +2,16 @@ import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
-import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, 'volunteers.db');
-console.log('Initializing database at:', dbPath);
-const db = new Database(dbPath);
-db.pragma('foreign_keys = ON');
 
-// Initialize database with error handling
-try {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS services (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      date TEXT NOT NULL,
-      capacity INTEGER NOT NULL,
-      description TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-  console.log('Services table checked/created');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS volunteers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      service_id INTEGER NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
-    );
-  `);
-  console.log('Volunteers table checked/created');
-} catch (err) {
-  console.error('Database initialization error:', err);
-}
-
-// Migration: Remove UNIQUE constraint if it exists
-try {
-  const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='services'").get() as any;
-  if (tableInfo && tableInfo.sql && tableInfo.sql.includes('UNIQUE')) {
-    console.log('Migrating services table to remove UNIQUE constraint...');
-    db.pragma('foreign_keys = OFF');
-    db.transaction(() => {
-      db.exec(`
-        ALTER TABLE services RENAME TO services_old;
-        CREATE TABLE services (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          date TEXT NOT NULL,
-          capacity INTEGER NOT NULL,
-          description TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        INSERT INTO services (id, date, capacity, description, created_at)
-        SELECT id, date, capacity, description, created_at FROM services_old;
-        DROP TABLE services_old;
-      `);
-    })();
-    db.pragma('foreign_keys = ON');
-    console.log('Migration complete.');
-  }
-} catch (err) {
-  console.error('Migration check failed (this is usually fine if table is new):', err);
-}
+// Google Script Setup
+const scriptUrl = process.env.GOOGLE_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwpVNXgp958nk6iJUrBzNSY-Wf2wsm2fbaP8D8n4OtbEO4ljT7BtHz_XGXG--bdo_Gl/exec';
 
 const app = express();
 const server = createServer(app);
@@ -82,121 +28,106 @@ function broadcast(data: any) {
   });
 }
 
+// Helper to call Google Script
+async function callScript(action: string, payload: any = {}) {
+  if (!scriptUrl) {
+    throw new Error('GOOGLE_SCRIPT_URL não configurado. Verifique o arquivo .env');
+  }
+
+  const response = await fetch(scriptUrl, {
+    method: 'POST',
+    body: JSON.stringify({ action, ...payload }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Erro no Google Script: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  if (result.error) {
+    throw new Error(result.error);
+  }
+  return result.data;
+}
+
 // API Routes - Services
-app.get('/api/services', (req, res) => {
+app.get('/api/services', async (req, res) => {
   try {
-    const services = db.prepare(`
-      SELECT s.*, (SELECT COUNT(*) FROM volunteers v WHERE v.service_id = s.id) as volunteer_count 
-      FROM services s 
-      ORDER BY s.date ASC
-    `).all();
-    res.json(services);
-  } catch (error) {
-    console.error('Database error (GET /api/services):', error);
-    res.status(500).json({ error: 'Erro ao buscar cultos no banco de dados' });
+    const data = await callScript('getServices');
+    res.json(data);
+  } catch (error: any) {
+    console.error('Error fetching services:', error);
+    res.status(500).json({ error: error.message || 'Erro ao buscar cultos' });
   }
 });
 
-app.post('/api/services', (req, res) => {
+app.post('/api/services', async (req, res) => {
   const { date, capacity, description } = req.body;
-  console.log('Creating service:', { date, capacity, description });
-  if (!date || !capacity) {
-    return res.status(400).json({ error: 'Data e capacidade são obrigatórios' });
-  }
+  if (!date || !capacity) return res.status(400).json({ error: 'Data e capacidade são obrigatórios' });
+
   try {
-    const info = db.prepare('INSERT INTO services (date, capacity, description) VALUES (?, ?, ?)').run(date, capacity, description);
-    const newService = { id: Number(info.lastInsertRowid), date, capacity, description, volunteer_count: 0 };
-    console.log('Service created successfully:', newService);
+    const newService = await callScript('addService', { date, capacity, description });
     broadcast({ type: 'SERVICE_ADDED', payload: newService });
     res.status(201).json(newService);
-  } catch (error) {
-    console.error('Error creating service:', error);
-    res.status(500).json({ error: 'Erro ao criar culto' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-app.delete('/api/services/:id', (req, res) => {
+app.delete('/api/services/:id', async (req, res) => {
   const { id } = req.params;
-  console.log(`Delete request for service ID: ${id}`);
   try {
-    const sId = parseInt(id);
-    const result = db.prepare('DELETE FROM services WHERE id = ?').run(sId);
-    console.log(`Service ${sId} delete result:`, result);
-    broadcast({ type: 'SERVICE_REMOVED', payload: { id: sId } });
+    await callScript('deleteService', { id });
+    broadcast({ type: 'SERVICE_REMOVED', payload: { id: parseInt(id) } });
     res.status(204).send();
-  } catch (error) {
-    console.error('Error removing service:', error);
-    res.status(500).json({ error: 'Erro ao remover culto' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-app.patch('/api/services/:id', (req, res) => {
+app.patch('/api/services/:id', async (req, res) => {
   const { id } = req.params;
   const { capacity } = req.body;
-  console.log(`Updating service ${id} capacity to ${capacity}`);
-  if (capacity === undefined) return res.status(400).json({ error: 'Capacidade é obrigatória' });
   try {
-    db.prepare('UPDATE services SET capacity = ? WHERE id = ?').run(capacity, id);
+    await callScript('updateServiceCapacity', { id, capacity });
     broadcast({ type: 'SERVICE_UPDATED', payload: { id: parseInt(id), capacity: parseInt(capacity) } });
     res.status(200).json({ id: parseInt(id), capacity: parseInt(capacity) });
-  } catch (error) {
-    console.error('Error updating capacity:', error);
-    res.status(500).json({ error: 'Erro ao atualizar capacidade' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
 // API Routes - Volunteers
-app.get('/api/volunteers', (req, res) => {
-  const volunteers = db.prepare('SELECT * FROM volunteers ORDER BY created_at DESC').all();
-  res.json(volunteers);
+app.get('/api/volunteers', async (req, res) => {
+  try {
+    const data = await callScript('getVolunteers');
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.post('/api/volunteers', (req, res) => {
+app.post('/api/volunteers', async (req, res) => {
   const { name, service_id } = req.body;
-  
-  if (!name || !service_id) {
-    return res.status(400).json({ error: 'Nome e culto são obrigatórios' });
-  }
-  
+  if (!name || !service_id) return res.status(400).json({ error: 'Nome e culto são obrigatórios' });
+
   try {
-    const sId = parseInt(service_id.toString());
-    
-    // Check capacity more robustly
-    const currentCount = db.prepare('SELECT COUNT(*) as count FROM volunteers WHERE service_id = ?').get(sId) as any;
-    const service = db.prepare('SELECT capacity FROM services WHERE id = ?').get(sId) as any;
-    
-    if (!service) {
-      return res.status(404).json({ error: 'Culto não encontrado' });
-    }
-
-    console.log(`Service ${sId}: ${currentCount.count} volunteers, ${service.capacity} capacity`);
-
-    if (currentCount.count >= service.capacity) {
-      return res.status(400).json({ error: `Vagas esgotadas para este culto (${currentCount.count}/${service.capacity})` });
-    }
-
-    const info = db.prepare('INSERT INTO volunteers (name, service_id) VALUES (?, ?)').run(name, sId);
-    const newVolunteer = { id: Number(info.lastInsertRowid), name, service_id: sId, created_at: new Date().toISOString() };
-    
+    const newVolunteer = await callScript('addVolunteer', { name, service_id });
     broadcast({ type: 'VOLUNTEER_ADDED', payload: newVolunteer });
     res.status(201).json(newVolunteer);
-  } catch (error) {
-    console.error('Error adding volunteer:', error);
-    res.status(500).json({ error: 'Erro ao salvar voluntário' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-app.delete('/api/volunteers/:id', (req, res) => {
+app.delete('/api/volunteers/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const volunteer = db.prepare('SELECT service_id FROM volunteers WHERE id = ?').get(id) as any;
-    if (volunteer) {
-      db.prepare('DELETE FROM volunteers WHERE id = ?').run(id);
-      broadcast({ type: 'VOLUNTEER_REMOVED', payload: { id: parseInt(id), service_id: volunteer.service_id } });
-    }
+    const result = await callScript('deleteVolunteer', { id });
+    broadcast({ type: 'VOLUNTEER_REMOVED', payload: { id: parseInt(id), service_id: result.service_id } });
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao remover voluntário' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
