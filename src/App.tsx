@@ -29,6 +29,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const handleAdminAuth = (e: FormEvent) => {
     e.preventDefault();
@@ -156,7 +157,7 @@ export default function App() {
 
   const handleVolunteerSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !selectedServiceId) return;
+    if (!name.trim() || !selectedServiceId || isSubmitting) return;
 
     const service = services.find(s => s.id === selectedServiceId);
     if (service && service.volunteer_count >= service.capacity) {
@@ -164,6 +165,7 @@ export default function App() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const newVolunteer = await fetchFromScript('addVolunteer', { name, service_id: selectedServiceId });
       setVolunteers(prev => [newVolunteer, ...prev]);
@@ -171,13 +173,16 @@ export default function App() {
       toast.success('Inscrição realizada!');
     } catch (error) {
       toast.error('Erro ao realizar inscrição');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleServiceSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newServiceDate || !newServiceCapacity) return;
+    if (!newServiceDate || !newServiceCapacity || isSubmitting) return;
 
+    setIsSubmitting(true);
     try {
       const newService = await fetchFromScript('addService', { 
         date: newServiceDate, 
@@ -191,6 +196,8 @@ export default function App() {
       toast.success('Culto adicionado!');
     } catch (error) {
       toast.error('Erro ao adicionar culto');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -261,7 +268,7 @@ export default function App() {
       <header className="relative h-[30vh] flex items-center justify-center overflow-hidden bg-stone-900 text-white">
         <div className="absolute inset-0">
           <img 
-            src="https://i.ibb.co/Kz34GxBk/Whats-App-Image-2026-02-27-at-12-14-59.jpg" 
+            src="https://i.ibb.co/32N5Cz7/5aac0e57-9616-450f-babe-14709ced85c4.jpg" 
             alt="Equipe LGF" 
             className="w-full h-full object-cover opacity-50"
             referrerPolicy="no-referrer"
@@ -384,7 +391,7 @@ export default function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* Left Column: Forms */}
-          <div className="lg:col-span-4 space-y-6">
+          <div className="lg:col-span-4 space-y-6 order-1">
             {isAdmin ? (
               <motion.div 
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -427,8 +434,19 @@ export default function App() {
                       className="w-full bg-stone-800 border border-stone-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                     />
                   </div>
-                  <button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-xl font-bold transition-all shadow-lg shadow-emerald-900/20">
-                    Criar Culto
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-xl font-bold transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Criando...
+                      </>
+                    ) : (
+                      'Criar Culto'
+                    )}
                   </button>
                 </form>
               </motion.div>
@@ -478,93 +496,28 @@ export default function App() {
 
                   <button
                     type="submit"
-                    disabled={!selectedServiceId || (currentService && currentService.volunteer_count >= currentService.capacity)}
+                    disabled={isSubmitting || !selectedServiceId || (currentService && currentService.volunteer_count >= currentService.capacity)}
                     className="w-full bg-stone-900 text-white py-4 rounded-xl font-semibold hover:bg-stone-800 disabled:bg-stone-200 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 group shadow-lg"
                   >
-                    Confirmar Presença
-                    <Heart className="w-4 h-4 group-hover:fill-white transition-all" />
+                    {isSubmitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Enviando...
+                      </>
+                    ) : (
+                      <>
+                        Confirmar Presença
+                        <Heart className="w-4 h-4 group-hover:fill-white transition-all" />
+                      </>
+                    )}
                   </button>
                 </form>
               </motion.div>
             )}
-
-            {/* Guidelines Section */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-stone-50 rounded-3xl p-8 border border-stone-200"
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <CheckCircle2 className="w-6 h-6 text-stone-900" />
-                <h2 className="text-xl font-semibold text-stone-900">Diretrizes para Servir</h2>
-              </div>
-              
-              <div className="space-y-6">
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
-                    <span className="text-xs font-bold">01</span>
-                  </div>
-                  <p className="text-sm text-stone-600 leading-relaxed">
-                    Sirva sempre com <strong className="text-stone-900">excelência, postura e respeito</strong>. Seu comportamento representa <strong className="text-stone-900">Jesus</strong>.
-                  </p>
-                </div>
-
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
-                    <span className="text-xs font-bold">02</span>
-                  </div>
-                  <p className="text-sm text-stone-600 leading-relaxed">
-                    Deve-se utilizar <strong className="text-stone-900">camiseta ou camisa preta</strong>, com calça comum que não seja justa ou transparente. Mulheres que optarem por usar legging devem obrigatoriamente usar camiseta longa, cobrindo o quadril e o bumbum. O padrão de vestimenta deve transmitir respeito, organização e postura, refletindo excelência no servir.
-                  </p>
-                </div>
-
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
-                    <span className="text-xs font-bold">03</span>
-                  </div>
-                  <p className="text-sm text-stone-600 leading-relaxed">
-                    Esteja sempre atento às <strong className="text-stone-900">orientações do seu líder</strong> e execute exatamente o que for direcionado.
-                  </p>
-                </div>
-
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
-                    <span className="text-xs font-bold">04</span>
-                  </div>
-                  <p className="text-sm text-stone-600 leading-relaxed">
-                    Na dúvida, <strong className="text-stone-900">não tome decisões por conta própria</strong>. Pergunte antes de agir.
-                  </p>
-                </div>
-
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
-                    <span className="text-xs font-bold">05</span>
-                  </div>
-                  <p className="text-sm text-stone-600 leading-relaxed">
-                    <strong className="text-stone-900">Cuide do seu corpo</strong>: beba água e se alimente bem para manter disposição e foco.
-                  </p>
-                </div>
-
-                <div className="flex gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
-                    <span className="text-xs font-bold">06</span>
-                  </div>
-                  <p className="text-sm text-stone-600 leading-relaxed">
-                    E acima de tudo, <strong className="text-stone-900">carregue uma palavra</strong> — esteja preparado espiritualmente e emocionalmente para servir com propósito.
-                  </p>
-                </div>
-
-                <div className="pt-4 border-t border-stone-200">
-                  <p className="text-xs italic text-stone-500 text-center">
-                    "Servir não é apenas fazer, é fazer com intenção, responsabilidade e coração alinhado."
-                  </p>
-                </div>
-              </div>
-            </motion.div>
           </div>
 
           {/* Right Column: List */}
-          <div className="lg:col-span-8 space-y-6">
+          <div className="lg:col-span-8 space-y-6 order-2 lg:row-span-2">
             {/* Service Tabs */}
             <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
               {services.map(s => {
@@ -635,7 +588,7 @@ export default function App() {
                   <div className="flex items-center gap-3">
                     <Users className="w-6 h-6 text-stone-800" />
                     <h2 className="text-xl font-semibold text-stone-800">
-                      {currentService ? `Voluntários (${filteredVolunteers.length}) - ${safeFormat(currentService.date, "dd/MM")}` : 'Selecione um Culto'}
+                      {currentService ? `Voluntários: ${filteredVolunteers.length} - ${currentService.description || 'Culto'} e ${safeFormat(currentService.date, "dd/MM")}` : 'Selecione um Culto'}
                     </h2>
                   </div>
                   <div className="flex items-center gap-4">
@@ -717,6 +670,82 @@ export default function App() {
                     </AnimatePresence>
                   </ul>
                 )}
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Guidelines Section (End on mobile, Left col on desktop) */}
+          <div className="lg:col-span-4 space-y-6 order-3">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-stone-50 rounded-3xl p-8 border border-stone-200"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <CheckCircle2 className="w-6 h-6 text-stone-900" />
+                <h2 className="text-xl font-semibold text-stone-900">Informações para Servir</h2>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">01</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    Sirva sempre com <strong className="text-stone-900">excelência, postura e respeito</strong>. Seu comportamento representa <strong className="text-stone-900">Jesus</strong>.
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">02</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    Deve-se utilizar <strong className="text-stone-900">camiseta ou camisa preta</strong>, com calça comum que não seja justa ou transparente. Mulheres que optarem por usar legging devem obrigatoriamente usar camiseta longa, cobrindo o quadril e o bumbum. O padrão de vestimenta deve transmitir respeito, organização e postura, refletindo excelência no servir.
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">03</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    Esteja sempre atento às <strong className="text-stone-900">orientações do seu líder</strong> e execute exatamente o que for direcionado.
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">04</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    Na dúvida, <strong className="text-stone-900">não tome decisões por conta própria</strong>. Pergunte antes de agir.
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">05</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    <strong className="text-stone-900">Cuide do seu corpo</strong>: beba água e se alimente bem para manter disposição e foco.
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">06</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    E acima de tudo, <strong className="text-stone-900">carregue uma palavra</strong> — esteja preparado espiritualmente e emocionalmente para servir com propósito.
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-stone-200">
+                  <p className="text-xs italic text-stone-500 text-center">
+                    "Servir não é apenas fazer, é fazer com intenção, responsabilidade e coração alinhado."
+                  </p>
+                </div>
               </div>
             </motion.div>
           </div>
