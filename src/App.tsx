@@ -30,6 +30,14 @@ export default function App() {
   const [showPasswordInput, setShowPasswordInput] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [myRegistrationIds, setMyRegistrationIds] = useState<number[]>(() => {
+    const saved = localStorage.getItem('lgf_my_registrations');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('lgf_my_registrations', JSON.stringify(myRegistrationIds));
+  }, [myRegistrationIds]);
   
   const handleAdminAuth = (e: FormEvent) => {
     e.preventDefault();
@@ -169,6 +177,7 @@ export default function App() {
     try {
       const newVolunteer = await fetchFromScript('addVolunteer', { name, service_id: selectedServiceId });
       setVolunteers(prev => [newVolunteer, ...prev]);
+      setMyRegistrationIds(prev => [...prev, newVolunteer.id]);
       setName('');
       toast.success('Inscrição realizada!');
     } catch (error) {
@@ -206,6 +215,7 @@ export default function App() {
     try {
       await fetchFromScript('deleteVolunteer', { id });
       setVolunteers(prev => prev.filter(v => v.id !== id));
+      setMyRegistrationIds(prev => prev.filter(regId => regId !== id));
       toast.success('Removido com sucesso');
     } catch (error) {
       toast.error('Erro ao remover');
@@ -647,23 +657,25 @@ export default function App() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeVolunteer(volunteer.id);
-                              }}
-                              className={`p-2 md:p-3 rounded-xl transition-all flex items-center gap-2 border ${
-                                isAdmin 
-                                  ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' 
-                                  : 'bg-stone-50 text-stone-400 border-stone-100 hover:text-red-500 hover:bg-red-50 hover:border-red-100'
-                              }`}
-                              title="Remover da lista"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span className="text-[10px] font-bold uppercase">
-                                {isAdmin ? 'Excluir' : 'Remover'}
-                              </span>
-                            </button>
+                            {(isAdmin || myRegistrationIds.includes(volunteer.id)) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeVolunteer(volunteer.id);
+                                }}
+                                className={`p-2 md:p-3 rounded-xl transition-all flex items-center gap-2 border ${
+                                  isAdmin 
+                                    ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' 
+                                    : 'bg-stone-50 text-stone-400 border-stone-100 hover:text-red-500 hover:bg-red-50 hover:border-red-100'
+                                }`}
+                                title="Remover da lista"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                <span className="text-[10px] font-bold uppercase">
+                                  {isAdmin ? 'Excluir' : 'Remover'}
+                                </span>
+                              </button>
+                            )}
                           </div>
                         </motion.li>
                       ))}
