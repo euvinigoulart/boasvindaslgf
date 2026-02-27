@@ -11,7 +11,7 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Google Script Setup
-const scriptUrl = process.env.GOOGLE_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwpVNXgp958nk6iJUrBzNSY-Wf2wsm2fbaP8D8n4OtbEO4ljT7BtHz_XGXG--bdo_Gl/exec';
+const scriptUrl = process.env.GOOGLE_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbxin3v_CEMXweTsVG44Fo2J7Wzu9biukv8SGVavHuoKPVJGh5_OahRMRwXTQhR_smWn/exec';
 
 const app = express();
 const server = createServer(app);

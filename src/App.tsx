@@ -69,7 +69,7 @@ export default function App() {
     };
   }, []);
 
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpVNXgp958nk6iJUrBzNSY-Wf2wsm2fbaP8D8n4OtbEO4ljT7BtHz_XGXG--bdo_Gl/exec';
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxin3v_CEMXweTsVG44Fo2J7Wzu9biukv8SGVavHuoKPVJGh5_OahRMRwXTQhR_smWn/exec';
 
   const callScript = async (action: string, payload: any = {}) => {
     try {
@@ -94,6 +94,7 @@ export default function App() {
     // For GET actions, we use query params because POST with CORS is tricky on Google Script
     if (action.startsWith('get')) {
       url.searchParams.append('action', action);
+      url.searchParams.append('_t', Date.now().toString()); // Evita cache
       if (payload.service_id) url.searchParams.append('service_id', payload.service_id);
       
       const res = await fetch(url.toString());
