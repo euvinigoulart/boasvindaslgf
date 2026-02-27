@@ -174,7 +174,8 @@ export default function App() {
         setNewServiceDesc('');
         toast.success('Culto adicionado!');
       } else {
-        toast.error('Erro ao adicionar culto');
+        const err = await response.json();
+        toast.error(err.error || 'Erro ao adicionar culto');
       }
     } catch (error) {
       toast.error('Erro de conexão');
@@ -456,6 +457,11 @@ export default function App() {
                     <div className="text-lg font-serif font-bold text-stone-900">
                       {format(new Date(s.date + 'T12:00:00'), "dd 'de' MMM", { locale: ptBR })}
                     </div>
+                    {s.description && (
+                      <div className="text-[10px] font-bold uppercase text-stone-500 mt-1 truncate">
+                        {s.description}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-[10px] font-bold uppercase opacity-60">Vagas</span>
                       <div className="flex items-center gap-2">

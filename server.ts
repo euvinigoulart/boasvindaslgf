@@ -14,12 +14,37 @@ db.pragma('foreign_keys = ON');
 db.exec(`
   CREATE TABLE IF NOT EXISTS services (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT NOT NULL UNIQUE,
+    date TEXT NOT NULL,
     capacity INTEGER NOT NULL,
     description TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+`);
 
+// Migration: Remove UNIQUE constraint if it exists (SQLite requires table recreation)
+const tableInfo = db.prepare("PRAGMA table_info(services)").all();
+const hasUnique = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='services'").get() as any;
+if (hasUnique && hasUnique.sql.includes('UNIQUE')) {
+  console.log('Migrating services table to remove UNIQUE constraint...');
+  db.transaction(() => {
+    db.exec(`
+      ALTER TABLE services RENAME TO services_old;
+      CREATE TABLE services (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        capacity INTEGER NOT NULL,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO services (id, date, capacity, description, created_at)
+      SELECT id, date, capacity, description, created_at FROM services_old;
+      DROP TABLE services_old;
+    `);
+  })();
+  console.log('Migration complete.');
+}
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS volunteers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -56,18 +81,14 @@ app.get('/api/services', (req, res) => {
 
 app.post('/api/services', (req, res) => {
   const { date, capacity, description } = req.body;
+  console.log('Creating service:', { date, capacity, description });
   if (!date || !capacity) {
     return res.status(400).json({ error: 'Data e capacidade são obrigatórios' });
   }
   try {
-    // Check if date already exists
-    const existing = db.prepare('SELECT id FROM services WHERE date = ?').get(date);
-    if (existing) {
-      return res.status(400).json({ error: 'Já existe um culto cadastrado para esta data' });
-    }
-
     const info = db.prepare('INSERT INTO services (date, capacity, description) VALUES (?, ?, ?)').run(date, capacity, description);
     const newService = { id: Number(info.lastInsertRowid), date, capacity, description, volunteer_count: 0 };
+    console.log('Service created successfully:', newService);
     broadcast({ type: 'SERVICE_ADDED', payload: newService });
     res.status(201).json(newService);
   } catch (error) {
