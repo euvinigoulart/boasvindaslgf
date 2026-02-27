@@ -7,26 +7,44 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database('volunteers.db');
+const dbPath = path.join(__dirname, 'volunteers.db');
+console.log('Initializing database at:', dbPath);
+const db = new Database(dbPath);
 db.pragma('foreign_keys = ON');
 
-// Initialize database
-db.exec(`
-  CREATE TABLE IF NOT EXISTS services (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    date TEXT NOT NULL,
-    capacity INTEGER NOT NULL,
-    description TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-`);
+// Initialize database with error handling
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS services (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      capacity INTEGER NOT NULL,
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  console.log('Services table checked/created');
 
-// Migration: Remove UNIQUE constraint if it exists (SQLite requires table recreation)
-const hasUnique = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='services'").get() as any;
-if (hasUnique && hasUnique.sql && hasUnique.sql.includes('UNIQUE')) {
-  console.log('Migrating services table to remove UNIQUE constraint...');
-  db.pragma('foreign_keys = OFF');
-  try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS volunteers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      service_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+    );
+  `);
+  console.log('Volunteers table checked/created');
+} catch (err) {
+  console.error('Database initialization error:', err);
+}
+
+// Migration: Remove UNIQUE constraint if it exists
+try {
+  const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='services'").get() as any;
+  if (tableInfo && tableInfo.sql && tableInfo.sql.includes('UNIQUE')) {
+    console.log('Migrating services table to remove UNIQUE constraint...');
+    db.pragma('foreign_keys = OFF');
     db.transaction(() => {
       db.exec(`
         ALTER TABLE services RENAME TO services_old;
@@ -42,23 +60,12 @@ if (hasUnique && hasUnique.sql && hasUnique.sql.includes('UNIQUE')) {
         DROP TABLE services_old;
       `);
     })();
-    console.log('Migration complete.');
-  } catch (err) {
-    console.error('Migration failed:', err);
-  } finally {
     db.pragma('foreign_keys = ON');
+    console.log('Migration complete.');
   }
+} catch (err) {
+  console.error('Migration check failed (this is usually fine if table is new):', err);
 }
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS volunteers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    service_id INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
-  );
-`);
 
 const app = express();
 const server = createServer(app);
