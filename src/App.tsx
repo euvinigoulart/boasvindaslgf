@@ -102,16 +102,54 @@ export default function App() {
     };
   };
 
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpVNXgp958nk6iJUrBzNSY-Wf2wsm2fbaP8D8n4OtbEO4ljT7BtHz_XGXG--bdo_Gl/exec';
+
+  const callScript = async (action: string, payload: any = {}) => {
+    try {
+      const response = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors', // Google Script requires no-cors or specific handling for simple POST
+        body: JSON.stringify({ action, ...payload }),
+      });
+      // Note: with no-cors we can't read the response, but for Google Script 
+      // it's often better to use a different approach for GET.
+      // Let's use a more robust fetch for Google Script:
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  };
+
+  // Improved fetch for Google Script (Handling the redirect)
+  const fetchFromScript = async (action: string, payload: any = {}) => {
+    const url = new URL(SCRIPT_URL);
+    // For GET actions, we use query params because POST with CORS is tricky on Google Script
+    if (action.startsWith('get')) {
+      url.searchParams.append('action', action);
+      if (payload.service_id) url.searchParams.append('service_id', payload.service_id);
+      
+      const res = await fetch(url.toString());
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      return json.data;
+    } else {
+      // For POST (mutations)
+      const res = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action, ...payload }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      return json.data;
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const servicesRes = await fetch('/api/services');
-      if (!servicesRes.ok) throw new Error(`Falha ao carregar cultos: ${servicesRes.status}`);
-      const servicesData = await servicesRes.json();
-      
-      const volunteersRes = await fetch('/api/volunteers');
-      if (!volunteersRes.ok) throw new Error(`Falha ao carregar voluntários: ${volunteersRes.status}`);
-      const volunteersData = await volunteersRes.json();
+      const servicesData = await fetchFromScript('getServices');
+      const volunteersData = await fetchFromScript('getVolunteers');
       
       setServices(servicesData);
       setVolunteers(volunteersData);
@@ -121,7 +159,7 @@ export default function App() {
       }
     } catch (error: any) {
       console.error('Erro no fetchData:', error);
-      toast.error(error.message || 'Erro de conexão com o servidor');
+      toast.error('Erro ao conectar com a planilha. Verifique se o Script está publicado como "Qualquer pessoa".');
     } finally {
       setLoading(false);
     }
@@ -138,21 +176,12 @@ export default function App() {
     }
 
     try {
-      const response = await fetch('/api/volunteers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, service_id: selectedServiceId }),
-      });
-
-      if (response.ok) {
-        setName('');
-        toast.success('Inscrição realizada!');
-      } else {
-        const err = await response.json();
-        toast.error(err.error || 'Erro ao realizar inscrição');
-      }
+      const newVolunteer = await fetchFromScript('addVolunteer', { name, service_id: selectedServiceId });
+      setVolunteers(prev => [newVolunteer, ...prev]);
+      setName('');
+      toast.success('Inscrição realizada!');
     } catch (error) {
-      toast.error('Erro de conexão');
+      toast.error('Erro ao realizar inscrição');
     }
   };
 
@@ -161,60 +190,41 @@ export default function App() {
     if (!newServiceDate || !newServiceCapacity) return;
 
     try {
-      const response = await fetch('/api/services', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          date: newServiceDate, 
-          capacity: newServiceCapacity,
-          description: newServiceDesc
-        }),
+      const newService = await fetchFromScript('addService', { 
+        date: newServiceDate, 
+        capacity: newServiceCapacity,
+        description: newServiceDesc
       });
-
-      if (response.ok) {
-        setNewServiceDate('');
-        setNewServiceCapacity(10);
-        setNewServiceDesc('');
-        toast.success('Culto adicionado!');
-      } else {
-        const err = await response.json();
-        toast.error(err.error || 'Erro ao adicionar culto');
-      }
+      setServices(prev => [...prev, newService].sort((a, b) => a.date.localeCompare(b.date)));
+      setNewServiceDate('');
+      setNewServiceCapacity(10);
+      setNewServiceDesc('');
+      toast.success('Culto adicionado!');
     } catch (error) {
-      toast.error('Erro de conexão');
+      toast.error('Erro ao adicionar culto');
     }
   };
 
   const removeVolunteer = async (id: any) => {
-    console.log('Attempting to remove volunteer:', id);
     if (!window.confirm('Deseja realmente remover este nome da lista?')) return;
     try {
-      const response = await fetch(`/api/volunteers/${id}`, { method: 'DELETE' });
-      if (response.ok) {
-        toast.success('Removido com sucesso');
-      } else {
-        const err = await response.json();
-        toast.error(err.error || 'Erro ao remover');
-      }
+      await fetchFromScript('deleteVolunteer', { id });
+      setVolunteers(prev => prev.filter(v => v.id !== id));
+      toast.success('Removido com sucesso');
     } catch (error) {
-      console.error('Delete error:', error);
-      toast.error('Erro de conexão ao tentar remover');
+      toast.error('Erro ao remover');
     }
   };
 
   const removeService = async (id: number) => {
     if (!window.confirm('Remover este culto e todos os seus voluntários?')) return;
     try {
-      const response = await fetch(`/api/services/${id}`, { method: 'DELETE' });
-      if (response.ok) {
-        toast.success('Culto removido');
-      } else {
-        const err = await response.json();
-        toast.error(err.error || 'Erro ao remover culto');
-      }
+      await fetchFromScript('deleteService', { id });
+      setServices(prev => prev.filter(s => s.id !== id));
+      setVolunteers(prev => prev.filter(v => v.service_id !== id));
+      toast.success('Culto removido');
     } catch (error) {
-      console.error('Service delete error:', error);
-      toast.error('Erro de conexão ao tentar remover culto');
+      toast.error('Erro ao remover culto');
     }
   };
 
@@ -227,14 +237,11 @@ export default function App() {
       return;
     }
     try {
-      const response = await fetch(`/api/services/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ capacity }),
-      });
-      if (response.ok) toast.success('Vagas atualizadas');
+      await fetchFromScript('updateServiceCapacity', { id, capacity });
+      setServices(prev => prev.map(s => s.id === id ? { ...s, capacity } : s));
+      toast.success('Vagas atualizadas');
     } catch (error) {
-      toast.error('Erro de conexão');
+      toast.error('Erro ao atualizar');
     }
   };
 
