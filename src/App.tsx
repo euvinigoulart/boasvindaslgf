@@ -103,22 +103,25 @@ export default function App() {
   };
 
   const fetchData = async () => {
+    setLoading(true);
     try {
-      const [servicesRes, volunteersRes] = await Promise.all([
-        fetch('/api/services'),
-        fetch('/api/volunteers')
-      ]);
+      const servicesRes = await fetch('/api/services');
+      if (!servicesRes.ok) throw new Error(`Falha ao carregar cultos: ${servicesRes.status}`);
       const servicesData = await servicesRes.json();
+      
+      const volunteersRes = await fetch('/api/volunteers');
+      if (!volunteersRes.ok) throw new Error(`Falha ao carregar voluntários: ${volunteersRes.status}`);
       const volunteersData = await volunteersRes.json();
       
       setServices(servicesData);
       setVolunteers(volunteersData);
       
-      if (servicesData.length > 0) {
+      if (servicesData.length > 0 && !selectedServiceId) {
         setSelectedServiceId(servicesData[0].id);
       }
-    } catch (error) {
-      toast.error('Erro ao carregar dados');
+    } catch (error: any) {
+      console.error('Erro no fetchData:', error);
+      toast.error(error.message || 'Erro de conexão com o servidor');
     } finally {
       setLoading(false);
     }

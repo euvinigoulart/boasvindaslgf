@@ -77,12 +77,17 @@ function broadcast(data: any) {
 
 // API Routes - Services
 app.get('/api/services', (req, res) => {
-  const services = db.prepare(`
-    SELECT s.*, (SELECT COUNT(*) FROM volunteers v WHERE v.service_id = s.id) as volunteer_count 
-    FROM services s 
-    ORDER BY s.date ASC
-  `).all();
-  res.json(services);
+  try {
+    const services = db.prepare(`
+      SELECT s.*, (SELECT COUNT(*) FROM volunteers v WHERE v.service_id = s.id) as volunteer_count 
+      FROM services s 
+      ORDER BY s.date ASC
+    `).all();
+    res.json(services);
+  } catch (error) {
+    console.error('Database error (GET /api/services):', error);
+    res.status(500).json({ error: 'Erro ao buscar cultos no banco de dados' });
+  }
 });
 
 app.post('/api/services', (req, res) => {
