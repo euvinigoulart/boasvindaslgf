@@ -238,6 +238,18 @@ export default function App() {
     }
   };
 
+  const safeFormat = (dateStr: string | undefined, formatStr: string, options?: any) => {
+    if (!dateStr) return 'Data inválida';
+    try {
+      // Try to handle both ISO strings and YYYY-MM-DD
+      const date = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T12:00:00');
+      if (isNaN(date.getTime())) return 'Data inválida';
+      return format(date, formatStr, options);
+    } catch (e) {
+      return 'Data inválida';
+    }
+  };
+
   const filteredVolunteers = volunteers.filter(v => v.service_id === selectedServiceId);
   const currentService = services.find(s => s.id === selectedServiceId);
 
@@ -420,7 +432,7 @@ export default function App() {
                         const count = getVolunteerCount(s.id);
                         return (
                           <option key={s.id} value={s.id} disabled={count >= s.capacity}>
-                            {format(new Date(s.date + 'T12:00:00'), "dd/MM")} - {s.description || 'Culto'} ({s.capacity - count} vagas)
+                            {safeFormat(s.date, "dd/MM")} - {s.description || 'Culto'} ({s.capacity - count} vagas)
                           </option>
                         );
                       })}
@@ -459,16 +471,19 @@ export default function App() {
               {services.map(s => {
                 const count = getVolunteerCount(s.id);
                 return (
-                  <button
+                  <div
                     key={s.id}
                     onClick={() => setSelectedServiceId(s.id)}
-                    className={`flex-shrink-0 px-6 py-4 rounded-2xl border transition-all text-left min-w-[160px] ${selectedServiceId === s.id ? 'bg-white border-stone-900 shadow-md' : 'bg-stone-100 border-transparent text-stone-500 hover:bg-stone-200'}`}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelectedServiceId(s.id); }}
+                    role="button"
+                    tabIndex={0}
+                    className={`flex-shrink-0 px-6 py-4 rounded-2xl border transition-all text-left min-w-[160px] cursor-pointer outline-none focus:ring-2 focus:ring-stone-900 focus:ring-offset-2 ${selectedServiceId === s.id ? 'bg-white border-stone-900 shadow-md' : 'bg-stone-100 border-transparent text-stone-500 hover:bg-stone-200'}`}
                   >
                     <div className="text-xs font-bold uppercase tracking-tighter mb-1">
-                      {format(new Date(s.date + 'T12:00:00'), "EEEE", { locale: ptBR })}
+                      {safeFormat(s.date, "EEEE", { locale: ptBR })}
                     </div>
                     <div className="text-lg font-serif font-bold text-stone-900">
-                      {format(new Date(s.date + 'T12:00:00'), "dd 'de' MMM", { locale: ptBR })}
+                      {safeFormat(s.date, "dd 'de' MMM", { locale: ptBR })}
                     </div>
                     {s.description && (
                       <div className="text-[10px] font-bold uppercase text-stone-500 mt-1 truncate">
@@ -502,7 +517,7 @@ export default function App() {
                         </button>
                       </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
               {services.length === 0 && (
@@ -521,7 +536,7 @@ export default function App() {
                   <div className="flex items-center gap-3">
                     <Users className="w-6 h-6 text-stone-800" />
                     <h2 className="text-xl font-semibold text-stone-800">
-                      {currentService ? `Voluntários (${filteredVolunteers.length}) - ${format(new Date(currentService.date + 'T12:00:00'), "dd/MM")}` : 'Selecione um Culto'}
+                      {currentService ? `Voluntários (${filteredVolunteers.length}) - ${safeFormat(currentService.date, "dd/MM")}` : 'Selecione um Culto'}
                     </h2>
                   </div>
                   <div className="flex items-center gap-4">
@@ -575,28 +590,27 @@ export default function App() {
                             <div>
                               <h3 className="font-medium text-stone-900">{volunteer.name}</h3>
                               <p className="text-[10px] text-stone-400 uppercase font-bold">
-                                {format(new Date(volunteer.created_at), "HH:mm 'em' dd/MM")}
+                                {safeFormat(volunteer.created_at, "HH:mm 'em' dd/MM")}
                               </p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            {isAdmin && (
-                              <span className="text-[10px] font-bold text-red-500 uppercase mr-2 hidden md:inline">Admin</span>
-                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 removeVolunteer(volunteer.id);
                               }}
-                              className={`p-3 rounded-xl transition-all flex items-center gap-2 ${
+                              className={`p-2 md:p-3 rounded-xl transition-all flex items-center gap-2 border ${
                                 isAdmin 
-                                  ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 opacity-100' 
-                                  : 'text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100'
+                                  ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' 
+                                  : 'bg-stone-50 text-stone-400 border-stone-100 hover:text-red-500 hover:bg-red-50 hover:border-red-100'
                               }`}
                               title="Remover da lista"
                             >
                               <Trash2 className="w-4 h-4" />
-                              {isAdmin && <span className="text-xs font-bold uppercase">Excluir</span>}
+                              <span className="text-[10px] font-bold uppercase">
+                                {isAdmin ? 'Excluir' : 'Remover'}
+                              </span>
                             </button>
                           </div>
                         </motion.li>
