@@ -54,10 +54,11 @@ export default function App() {
 
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-  const socketRef = useRef<WebSocket | null>(null);
+  const [verse, setVerse] = useState<{ text: string; reference: string } | null>(null);
 
   useEffect(() => {
     fetchData();
+    fetchVerse();
     
     // Set up polling every 5 seconds for faster updates
     const interval = setInterval(() => {
@@ -68,6 +69,25 @@ export default function App() {
       clearInterval(interval);
     };
   }, []);
+
+  const fetchVerse = async () => {
+    try {
+      // Usando a API da Bíblia Digital (muito estável para português)
+      const res = await fetch('https://www.abibliadigital.com.br/api/verses/nvi/random');
+      const data = await res.json();
+      setVerse({
+        text: data.text,
+        reference: `${data.book.name} ${data.chapter}:${data.number}`
+      });
+    } catch (e) {
+      console.error('Erro ao buscar versículo:', e);
+      // Fallback caso a API falhe
+      setVerse({
+        text: "Lâmpada para os meus pés é tua palavra, e luz para o meu caminho.",
+        reference: "Salmos 119:105"
+      });
+    }
+  };
 
   const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxin3v_CEMXweTsVG44Fo2J7Wzu9biukv8SGVavHuoKPVJGh5_OahRMRwXTQhR_smWn/exec';
 
@@ -334,6 +354,33 @@ export default function App() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 -mt-8 relative z-20">
+        {/* Versículo do Dia */}
+        <AnimatePresence>
+          {verse && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8 bg-white/80 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-xl border border-stone-100 text-center relative overflow-hidden group"
+            >
+              <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
+              <div className="relative z-10">
+                <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-stone-400 mb-3 block">Versículo do Dia</span>
+                <p className="font-serif text-xl md:text-2xl text-stone-800 italic leading-relaxed mb-4">
+                  "{verse.text}"
+                </p>
+                <div className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-xs uppercase tracking-widest">
+                  <div className="h-px w-4 bg-emerald-200" />
+                  {verse.reference}
+                  <div className="h-px w-4 bg-emerald-200" />
+                </div>
+              </div>
+              <div className="absolute -right-4 -bottom-4 opacity-[0.03] group-hover:opacity-[0.05] transition-opacity">
+                <Heart className="w-32 h-32" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* Left Column: Forms */}
@@ -440,6 +487,80 @@ export default function App() {
                 </form>
               </motion.div>
             )}
+
+            {/* Guidelines Section */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-stone-50 rounded-3xl p-8 border border-stone-200"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <CheckCircle2 className="w-6 h-6 text-stone-900" />
+                <h2 className="text-xl font-semibold text-stone-900">Diretrizes para Servir</h2>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">01</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    Sirva sempre com <strong className="text-stone-900">excelência, postura e respeito</strong>. Seu comportamento representa <strong className="text-stone-900">Jesus</strong>.
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">02</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    Deve-se utilizar <strong className="text-stone-900">camiseta ou camisa preta</strong>, com calça comum que não seja justa ou transparente. Mulheres que optarem por usar legging devem obrigatoriamente usar camiseta longa, cobrindo o quadril e o bumbum. O padrão de vestimenta deve transmitir respeito, organização e postura, refletindo excelência no servir.
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">03</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    Esteja sempre atento às <strong className="text-stone-900">orientações do seu líder</strong> e execute exatamente o que for direcionado.
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">04</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    Na dúvida, <strong className="text-stone-900">não tome decisões por conta própria</strong>. Pergunte antes de agir.
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">05</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    <strong className="text-stone-900">Cuide do seu corpo</strong>: beba água e se alimente bem para manter disposição e foco.
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100">
+                    <span className="text-xs font-bold">06</span>
+                  </div>
+                  <p className="text-sm text-stone-600 leading-relaxed">
+                    E acima de tudo, <strong className="text-stone-900">carregue uma palavra</strong> — esteja preparado espiritualmente e emocionalmente para servir com propósito.
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-stone-200">
+                  <p className="text-xs italic text-stone-500 text-center">
+                    "Servir não é apenas fazer, é fazer com intenção, responsabilidade e coração alinhado."
+                  </p>
+                </div>
+              </div>
+            </motion.div>
           </div>
 
           {/* Right Column: List */}
