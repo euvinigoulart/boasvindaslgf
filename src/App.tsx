@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserPlus, Trash2, Users, Calendar, Heart, CheckCircle2, RefreshCw, Instagram, Youtube } from 'lucide-react';
+import { UserPlus, Trash2, Users, Calendar, Heart, CheckCircle2, RefreshCw, Instagram, Youtube, Search, Download, FileText } from 'lucide-react';
 import { format, addDays, nextSunday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import toast, { Toaster } from 'react-hot-toast';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface Service {
   id: number;
@@ -89,6 +91,24 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const [verse, setVerse] = useState<{ text: string; reference: string } | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    });
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -106,44 +126,48 @@ export default function App() {
   }, []);
 
   const fetchVerse = () => {
-    // Lista de versículos para rotação diária (um para cada dia do mês ou mais)
+    // Lista de 40 versículos sobre servir para rotação diária
     const dailyVerses = [
-      { text: "Porque Deus amou o mundo de tal maneira que deu o seu Filho unigênito, para que todo aquele que nele crê não pereça, mas tenha a vida eterna.", reference: "João 3:16" },
-      { text: "O Senhor é o meu pastor, nada me faltará.", reference: "Salmos 23:1" },
-      { text: "Posso todas as coisas naquele que me fortalece.", reference: "Filipenses 4:13" },
-      { text: "Tudo quanto fizerdes, fazei-o de todo o coração, como ao Senhor e não aos homens.", reference: "Colossenses 3:23" },
-      { text: "Lançando sobre ele toda a vossa ansiedade, porque ele tem cuidado de vós.", reference: "1 Pedro 5:7" },
-      { text: "O meu socorro vem do Senhor, que fez o céu e a terra.", reference: "Salmos 121:2" },
-      { text: "Buscai primeiro o Reino de Deus e a sua justiça, e todas estas coisas vos serão acrescentadas.", reference: "Mateus 6:33" },
-      { text: "Alegrai-vos na esperança, sede pacientes na tribulação, perseverai na oração.", reference: "Romanos 12:12" },
-      { text: "O Senhor te abençoe e te guarde; o Senhor faça resplandecer o seu rosto sobre ti.", reference: "Números 6:24-25" },
-      { text: "Não fui eu que lhe ordenei? Seja forte e corajoso! Não se apavore nem desanime.", reference: "Josué 1:9" },
-      { text: "Aquietai-vos e sabei que eu sou Deus.", reference: "Salmos 46:10" },
-      { text: "O coração do homem planeja o seu caminho, mas o Senhor lhe dirige os passos.", reference: "Provérbios 16:9" },
-      { text: "Mas os que esperam no Senhor renovarão as suas forças.", reference: "Isaías 40:31" },
-      { text: "Deixo-vos a paz, a minha paz vos dou; não vo-la dou como o mundo a dá.", reference: "João 14:27" },
-      { text: "Ainda que eu andasse pelo vale da sombra da morte, não temeria mal algum.", reference: "Salmos 23:4" },
-      { text: "O amor é paciente, o amor é bondoso. Não inveja, não se vangloria, não se orgulha.", reference: "1 Coríntios 13:4" },
-      { text: "Confie no Senhor de todo o seu coração e não se apóie em seu próprio entendimento.", reference: "Provérbios 3:5" },
-      { text: "Se Deus é por nós, quem será contra nós?", reference: "Romanos 8:31" },
-      { text: "Em tudo dai graças, porque esta é a vontade de Deus em Cristo Jesus para convosco.", reference: "1 Tessalonicenses 5:18" },
-      { text: "Mil cairão ao teu lado, e dez mil à tua direita, mas tu não serás atingido.", reference: "Salmos 91:7" },
-      { text: "Eu sou o caminho, e a verdade e a vida; ninguém vem ao Pai, senão por mim.", reference: "João 14:6" },
-      { text: "Ensina-nos a contar os nossos dias, para que alcancemos coração sábio.", reference: "Salmos 90:12" },
-      { text: "O choro pode durar uma noite, mas a alegria vem pela manhã.", reference: "Salmos 30:5" },
-      { text: "Grandes coisas fez o Senhor por nós, pelas quais estamos alegres.", reference: "Salmos 126:3" },
-      { text: "Lâmpada para os meus pés é tua palavra, e luz para o meu caminho.", reference: "Salmos 119:105" },
-      { text: "Vinde a mim, todos os que estais cansados e oprimidos, e eu vos aliviarei.", reference: "Mateus 11:28" },
-      { text: "Pois eu bem sei os planos que tenho para vós, diz o Senhor, planos de paz e não de mal.", reference: "Jeremias 29:11" },
-      { text: "O Senhor é a minha luz e a minha salvação; a quem temerei?", reference: "Salmos 27:1" },
-      { text: "Tudo o que pedirdes em oração, crendo, recebereis.", reference: "Mateus 21:22" },
-      { text: "Sede fortes e corajosos; não temais, nem vos espanteis diante deles.", reference: "Deuteronômio 31:6" },
-      { text: "A graça do Senhor Jesus Cristo seja com todos. Amém.", reference: "Apocalipse 22:21" },
-      { text: "O Senhor é a minha força e o meu escudo; nele o meu coração confia.", reference: "Salmos 28:7" },
-      { text: "Deus é o nosso refúgio e fortaleza, socorro bem presente na angústia.", reference: "Salmos 46:1" },
-      { text: "Toda a Escritura é divinamente inspirada e proveitosa para o ensino.", reference: "2 Timóteo 3:16" },
-      { text: "O Senhor é bom, uma fortaleza no dia da angústia, e conhece os que confiam nele.", reference: "Naum 1:7" },
-      { text: "A palavra do Senhor permanece para sempre.", reference: "1 Pedro 1:25" }
+      { text: "Pois nem mesmo o Filho do homem veio para ser servido, mas para servir e dar a sua vida em resgate por muitos.", reference: "Marcos 10:45" },
+      { text: "Sirvam uns aos outros mediante o amor.", reference: "Gálatas 5:13" },
+      { text: "Cada um exerça o dom que recebeu para servir os outros, administrando fielmente a graça de Deus em suas múltiplas formas.", reference: "1 Pedro 4:10" },
+      { text: "Tudo o que fizerem, façam de todo o coração, como para o Senhor, e não para os homens.", reference: "Colossenses 3:23" },
+      { text: "Sirvam ao Senhor com alegria; apresentem-se diante dele com cânticos de júbilo.", reference: "Salmos 100:2" },
+      { text: "Quem quiser ser o primeiro entre vocês deverá ser escravo de todos.", reference: "Marcos 10:44" },
+      { text: "Não sejam vãos no zelo, mas fervorosos no espírito, servindo ao Senhor.", reference: "Romanos 12:11" },
+      { text: "Se alguém me serve, siga-me; e, onde eu estiver, ali estará também o meu servo. Se alguém me servir, meu Pai o honrará.", reference: "João 12:26" },
+      { text: "Aquele que serve a Cristo é agradável a Deus e aprovado pelos homens.", reference: "Romanos 14:18" },
+      { text: "Sejam sempre dedicados à obra do Senhor, pois vocês sabem que, no Senhor, o trabalho de vocês não será inútil.", reference: "1 Coríntios 15:58" },
+      { text: "Mas eu estou entre vocês como quem serve.", reference: "Lucas 22:27" },
+      { text: "Sirvam de boa vontade, como se estivessem servindo ao Senhor, e não aos homens.", reference: "Efésios 6:7" },
+      { text: "O maior entre vocês deverá ser servo.", reference: "Mateus 23:11" },
+      { text: "Deus não se esquecerá do trabalho de vocês e do amor que demonstraram por ele, pois ajudaram o povo santo.", reference: "Hebreus 6:10" },
+      { text: "Se alguém serve, faça-o com a força que Deus provê, de forma que em todas as coisas Deus seja glorificado.", reference: "1 Pedro 4:11" },
+      { text: "Escolham hoje a quem irão servir... Mas, eu e a minha família serviremos ao Senhor.", reference: "Josué 24:15" },
+      { text: "Aquele que é fiel no pouco, também é fiel no muito.", reference: "Lucas 16:10" },
+      { text: "Não servindo apenas quando vigiados, mas como escravos de Cristo, fazendo de coração a vontade de Deus.", reference: "Efésios 6:6" },
+      { text: "Assim, brilhe a luz de vocês diante dos homens, para que vejam as suas boas obras e glorifiquem ao Pai.", reference: "Mateus 5:16" },
+      { text: "Sempre que o fizeram a um destes meus irmãos mais pequeninos, a mim o fizeram.", reference: "Mateus 25:40" },
+      { text: "Enquanto temos oportunidade, façamos o bem a todos, especialmente aos da família da fé.", reference: "Gálatas 6:10" },
+      { text: "Não nos cansemos de fazer o bem, pois no tempo próprio colheremos, se não desanimarmos.", reference: "Gálatas 6:9" },
+      { text: "Somos feitura dele, criados em Cristo Jesus para as boas obras, as quais Deus preparou de antemão.", reference: "Efésios 2:10" },
+      { text: "Quem é o maior: o que está à mesa ou o que serve? Mas eu estou entre vós como quem serve.", reference: "Lucas 22:27" },
+      { text: "Não usem a liberdade como ocasião para a carne; antes, sirvam uns aos outros pelo amor.", reference: "Gálatas 5:13" },
+      { text: "Se alguém quer ser o primeiro, será o último de todos e o servo de todos.", reference: "Marcos 9:35" },
+      { text: "Ninguém pode servir a dois senhores; pois ou há de odiar um e amar o outro.", reference: "Mateus 6:24" },
+      { text: "Sirvam ao Senhor com temor e alegrem-se com tremor.", reference: "Salmos 2:11" },
+      { text: "Onde eu estiver, ali estará também o meu servo.", reference: "João 12:26" },
+      { text: "Pois o Filho do Homem não veio para ser servido, mas para servir.", reference: "Mateus 20:28" },
+      { text: "Se eu, pois, sendo Senhor e Mestre, vos lavei os pés, também vós deveis lavar os pés uns aos outros.", reference: "João 13:14" },
+      { text: "Porque vos dei o exemplo, para que, como eu vos fiz, façais vós também.", reference: "João 13:15" },
+      { text: "Em verdade, em verdade vos digo que o servo não é maior do que o seu senhor.", reference: "João 13:16" },
+      { text: "Se sabeis estas coisas, bem-aventurados sois se as praticardes.", reference: "João 13:17" },
+      { text: "Servi ao Senhor com todo o vosso coração.", reference: "1 Samuel 12:20" },
+      { text: "Somente temei ao Senhor, e servi-o fielmente com todo o vosso coração.", reference: "1 Samuel 12:24" },
+      { text: "Amai, e sirvas ao Senhor teu Deus com todo o teu coração e com toda a tua alma.", reference: "Deuteronômio 10:12" },
+      { text: "E tudo o que fizerdes, fazei-o em nome do Senhor Jesus, dando por ele graças a Deus Pai.", reference: "Colossenses 3:17" },
+      { text: "Servi uns aos outros conforme o dom que cada um recebeu.", reference: "1 Pedro 4:10" },
+      { text: "Aquele que serve a Cristo nestas coisas é agradável a Deus.", reference: "Romanos 14:18" }
     ];
 
     // Usa o dia do ano para selecionar o versículo (muda a cada 24h)
@@ -159,31 +183,50 @@ export default function App() {
 
   const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxin3v_CEMXweTsVG44Fo2J7Wzu9biukv8SGVavHuoKPVJGh5_OahRMRwXTQhR_smWn/exec';
 
-  // Improved fetch for Google Script (Handling the redirect and CORS)
-  const fetchFromScript = async (action: string, payload: any = {}) => {
+  // Improved fetch for Google Script with retry logic
+  const fetchFromScript = async (action: string, payload: any = {}, retries = 2) => {
     const url = new URL(SCRIPT_URL);
-    // Use GET for everything to avoid CORS preflight issues with Google Apps Script
     url.searchParams.append('action', action);
-    url.searchParams.append('_t', Date.now().toString()); // Cache busting
+    url.searchParams.append('_t', Date.now().toString());
     
-    // Append all payload items as query params
     Object.keys(payload).forEach(key => {
       url.searchParams.append(key, payload[key]);
     });
     
-    try {
-      const res = await fetch(url.toString());
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      return json.data;
-    } catch (e) {
-      console.error('Fetch error:', e);
-      throw e;
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const res = await fetch(url.toString(), {
+          method: 'GET',
+          cache: 'no-cache',
+          mode: 'cors',
+          redirect: 'follow'
+        });
+        
+        if (!res.ok) throw new Error(`Erro HTTP: ${res.status}`);
+        
+        const json = await res.json();
+        if (json.error) throw new Error(json.error);
+        return json.data;
+      } catch (e: any) {
+        console.error(`Tentativa ${i + 1} falhou:`, e);
+        if (i === retries) {
+          // Se for a última tentativa, lança o erro
+          if (e.message === 'Failed to fetch') {
+            throw new Error('Não foi possível conectar ao Google Script. Isso geralmente é causado por bloqueio de CORS ou o Script não estar publicado como "Qualquer pessoa".');
+          }
+          throw e;
+        }
+        // Espera um pouco antes de tentar novamente (backoff simples)
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+      }
     }
   };
 
+  const [isRetrying, setIsRetrying] = useState(false);
+
   const fetchData = async (silent = false) => {
     if (!silent) setLoading(true);
+    if (silent) setIsRetrying(true);
     try {
       const servicesData = await fetchFromScript('getServices');
       const volunteersData = await fetchFromScript('getVolunteers');
@@ -193,9 +236,17 @@ export default function App() {
       setLastUpdated(new Date());
     } catch (error: any) {
       console.error('Erro no fetchData:', error);
-      if (!silent) toast.error('Erro ao conectar com a planilha. Verifique se o Script está publicado como "Qualquer pessoa".');
+      if (!silent) {
+        const msg = error.message || 'Erro desconhecido';
+        if (msg.includes('Failed to fetch') || msg.includes('conectar ao Google Script')) {
+          toast.error('Falha na conexão: Verifique se o Google Script está publicado corretamente como "Qualquer pessoa".', { duration: 6000 });
+        } else {
+          toast.error(`Erro: ${msg}`);
+        }
+      }
     } finally {
       if (!silent) setLoading(false);
+      setIsRetrying(false);
     }
   };
 
@@ -258,6 +309,12 @@ export default function App() {
   };
 
   const removeVolunteer = async (id: any) => {
+    // Segurança adicional: verificar se o usuário tem permissão para excluir este ID
+    if (!isAdmin && !myRegistrationIds.includes(id)) {
+      toast.error('Você só pode remover sua própria inscrição.');
+      return;
+    }
+
     if (!window.confirm('Deseja realmente remover este nome da lista?')) return;
     try {
       await fetchFromScript('deleteVolunteer', { id });
@@ -310,8 +367,80 @@ export default function App() {
     }
   };
 
-  const filteredVolunteers = volunteers.filter(v => v.service_id === selectedServiceId);
+  const filteredVolunteers = volunteers
+    .filter(v => v.service_id === selectedServiceId)
+    .filter(v => v.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
   const currentService = services.find(s => s.id === selectedServiceId);
+
+  const exportToPDF = () => {
+    if (!currentService) return;
+
+    const doc = new jsPDF();
+    const dateStr = safeFormat(currentService.date, "dd/MM/yyyy");
+    const volunteersList = filteredVolunteers.map((v, i) => [i + 1, v.name, safeFormat(v.created_at, "HH:mm")]);
+
+    // Header
+    doc.setFontSize(20);
+    doc.setTextColor(40);
+    doc.text('Igreja LGF - Ministério de Boas Vindas', 14, 22);
+    
+    doc.setFontSize(14);
+    doc.text(`Lista de Voluntários - Culto: ${dateStr}`, 14, 32);
+    
+    if (currentService.description) {
+      doc.setFontSize(10);
+      doc.text(`Descrição: ${currentService.description}`, 14, 38);
+    }
+
+    // Table
+    autoTable(doc, {
+      startY: 45,
+      head: [['#', 'Nome do Voluntário', 'Horário de Inscrição']],
+      body: volunteersList,
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246] }, // Blue-500
+      styles: { fontSize: 10, cellPadding: 3 },
+    });
+
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(
+        `Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")} - Página ${i} de ${pageCount}`,
+        14,
+        doc.internal.pageSize.getHeight() - 10
+      );
+    }
+
+    doc.save(`voluntarios_lgf_${dateStr.replace(/\//g, '-')}.pdf`);
+    toast.success('PDF gerado com sucesso!');
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
+  };
+
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 
+      'bg-amber-500', 'bg-rose-500', 'bg-indigo-500',
+      'bg-cyan-500', 'bg-teal-500'
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
 
   const getVolunteerCount = (serviceId: number) => {
     return volunteers.filter(v => v.service_id === serviceId).length;
@@ -337,13 +466,31 @@ export default function App() {
           animate={{ opacity: 1 }}
           className="flex items-center gap-2 bg-black/20 backdrop-blur-md px-3 py-1 rounded-full border border-white/5"
         >
-          <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+          <div className={`w-1.5 h-1.5 rounded-full ${services.length > 0 ? 'bg-emerald-500' : 'bg-red-500 animate-pulse'}`} />
           <span className="text-[9px] uppercase tracking-widest font-bold text-white/60">
-            {format(lastUpdated, "HH:mm:ss")}
+            {services.length > 0 ? format(lastUpdated, "HH:mm:ss") : 'Erro de Conexão'}
           </span>
+          <button 
+            onClick={() => fetchData()} 
+            disabled={loading || isRetrying}
+            className="ml-1 p-1 hover:bg-white/10 rounded-full transition-colors disabled:opacity-50"
+            title="Tentar reconectar"
+          >
+            <RefreshCw className={`w-3 h-3 text-white/40 ${isRetrying ? 'animate-spin' : ''}`} />
+          </button>
         </motion.div>
 
         <div className="flex items-center gap-4">
+          {deferredPrompt && (
+            <button 
+              onClick={handleInstallClick}
+              className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full shadow-lg shadow-blue-900/20 transition-all flex items-center gap-1.5"
+            >
+              <Download className="w-3 h-3" />
+              Instalar App
+            </button>
+          )}
+
           {!isAdmin && !showPasswordInput && (
             <button 
               onClick={() => setShowPasswordInput(true)}
@@ -636,6 +783,17 @@ export default function App() {
                     <div className={`text-2xl font-serif font-bold leading-tight mb-4 ${isSelected ? 'text-white' : 'text-stone-400'}`}>
                       {s.description || 'Culto de Celebração'}
                     </div>
+
+                    {/* Progress Bar */}
+                    <div className="w-full h-1.5 bg-stone-800 rounded-full mb-6 overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min((count / s.capacity) * 100, 100)}%` }}
+                        className={`h-full rounded-full transition-all duration-1000 ${
+                          count >= s.capacity ? 'bg-red-500' : count >= s.capacity * 0.8 ? 'bg-amber-500' : 'bg-blue-500'
+                        }`}
+                      />
+                    </div>
                     
                     <div className="flex items-center justify-between pt-4 border-t border-stone-800/50">
                       <div className={`text-[10px] font-bold uppercase tracking-wider ${count >= s.capacity ? 'text-red-400' : 'text-blue-400'}`}>
@@ -699,19 +857,44 @@ export default function App() {
                     </p>
                   </div>
                   
-                  {currentService && (
-                    <div className="bg-stone-800/50 px-6 py-4 rounded-[2rem] border border-stone-800 flex items-center gap-8">
-                      <div className="text-center">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-1">Inscritos</div>
-                        <div className="text-2xl font-serif font-bold text-white">{filteredVolunteers.length}</div>
-                      </div>
-                      <div className="w-px h-8 bg-stone-700" />
-                      <div className="text-center">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-1">Disponíveis</div>
-                        <div className="text-2xl font-serif font-bold text-blue-400">{currentService.capacity - filteredVolunteers.length}</div>
-                      </div>
+                    <div className="flex flex-col md:flex-row md:items-center gap-4">
+                      {isAdmin && (
+                        <div className="flex items-center gap-2">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-500" />
+                            <input
+                              type="text"
+                              placeholder="Buscar voluntário..."
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              className="pl-10 pr-4 py-2 bg-stone-800/50 border border-stone-700 rounded-2xl text-sm text-white focus:outline-none focus:border-blue-500/50 transition-all w-full md:w-64"
+                            />
+                          </div>
+                          <button
+                            onClick={exportToPDF}
+                            className="flex items-center gap-2 bg-stone-800 hover:bg-stone-700 text-stone-300 px-4 py-2 rounded-2xl border border-stone-700 transition-all text-sm font-bold shadow-lg"
+                            title="Exportar para PDF"
+                          >
+                            <Download className="w-4 h-4" />
+                            <span className="hidden sm:inline">PDF</span>
+                          </button>
+                        </div>
+                      )}
+                      
+                      {currentService && (
+                        <div className="bg-stone-800/50 px-6 py-4 rounded-[2rem] border border-stone-800 flex items-center gap-8">
+                          <div className="text-center">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-1">Inscritos</div>
+                            <div className="text-2xl font-serif font-bold text-white">{volunteers.filter(v => v.service_id === selectedServiceId).length}</div>
+                          </div>
+                          <div className="w-px h-8 bg-stone-700" />
+                          <div className="text-center">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-stone-500 mb-1">Disponíveis</div>
+                            <div className="text-2xl font-serif font-bold text-blue-400">{currentService.capacity - volunteers.filter(v => v.service_id === selectedServiceId).length}</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -731,12 +914,12 @@ export default function App() {
                         }`}
                       >
                         <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-inner ${
                             myRegistrationIds.includes(v.id) 
-                              ? 'bg-blue-500 text-white' 
-                              : 'bg-stone-700 text-stone-300'
+                              ? 'bg-blue-600 text-white ring-2 ring-blue-400/30' 
+                              : `${getAvatarColor(v.name)} text-white`
                           }`}>
-                            {index + 1}
+                            {getInitials(v.name)}
                           </div>
                           <div>
                             <div className="font-bold text-stone-100 flex items-center gap-2">
@@ -754,7 +937,11 @@ export default function App() {
                         {(isAdmin || myRegistrationIds.includes(v.id)) && (
                           <button
                             onClick={() => removeVolunteer(v.id)}
-                            className="p-2 text-stone-600 hover:text-red-400 hover:bg-red-900/30 rounded-full transition-all opacity-0 group-hover:opacity-100"
+                            className={`p-2 rounded-full transition-all ${
+                              myRegistrationIds.includes(v.id) 
+                                ? 'text-red-400 bg-red-900/10 opacity-100' 
+                                : 'text-stone-600 hover:text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100'
+                            }`}
                             title="Remover inscrição"
                           >
                             <Trash2 className="w-4 h-4" />
