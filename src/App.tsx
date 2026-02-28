@@ -83,7 +83,7 @@ export default function App() {
   const fetchVerse = async () => {
     try {
       const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) throw new Error('API Key not found');
+      if (!apiKey) throw new Error(AIzaSyAxlZX4sD09Osex92itbzrcFqPwRY989fg);
       
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
