@@ -4,6 +4,7 @@ import { UserPlus, Trash2, Users, Calendar, Heart, CheckCircle2, RefreshCw } fro
 import { format, addDays, nextSunday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import toast, { Toaster } from 'react-hot-toast';
+import { GoogleGenAI } from "@google/genai";
 
 interface Service {
   id: number;
@@ -81,13 +82,30 @@ export default function App() {
 
   const fetchVerse = async () => {
     try {
-      // Usando a API da Bíblia Digital (muito estável para português)
-      const res = await fetch('https://www.abibliadigital.com.br/api/verses/nvi/random');
-      const data = await res.json();
-      setVerse({
-        text: data.text,
-        reference: `${data.book.name} ${data.chapter}:${data.number}`
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error('API Key not found');
+      
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: "Qual é o versículo do dia de hoje (data atual) no site bibliaonline.com.br? Pesquise no Google para obter o versículo exato de hoje. Retorne APENAS um JSON com os campos 'text' (o texto do versículo) e 'reference' (livro, capítulo e versículo).",
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+        }
       });
+      
+      const jsonStr = response.text || '{}';
+      const data = JSON.parse(jsonStr);
+      
+      if (data.text && data.reference) {
+        setVerse({
+          text: data.text,
+          reference: data.reference
+        });
+      } else {
+        throw new Error('Formato de resposta inválido');
+      }
     } catch (e) {
       console.error('Erro ao buscar versículo:', e);
       // Fallback caso a API falhe
