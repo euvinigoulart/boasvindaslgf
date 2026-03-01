@@ -207,6 +207,7 @@ export default function App() {
       url.searchParams.append(key, payload[key]);
     });
     
+    let lastError: any;
     for (let i = 0; i <= retries; i++) {
       try {
         const res = await fetch(url.toString(), {
@@ -222,18 +223,20 @@ export default function App() {
         if (json.error) throw new Error(json.error);
         return json.data;
       } catch (e: any) {
+        lastError = e;
         console.error(`Tentativa ${i + 1} falhou:`, e);
-        if (i === retries) {
-          // Se for a última tentativa, lança o erro
-          if (e.message === 'Failed to fetch') {
-            throw new Error('Não foi possível conectar ao Google Script. Isso geralmente é causado por bloqueio de CORS ou o Script não estar publicado como "Qualquer pessoa".');
-          }
-          throw e;
+        if (i < retries) {
+          // Espera um pouco antes de tentar novamente (backoff simples)
+          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
         }
-        // Espera um pouco antes de tentar novamente (backoff simples)
-        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
       }
     }
+    
+    // Se chegou aqui, todas as tentativas falharam
+    if (lastError && lastError.message === 'Failed to fetch') {
+      throw new Error('Não foi possível conectar ao Google Script. Isso geralmente é causado por bloqueio de CORS ou o Script não estar publicado como "Qualquer pessoa".');
+    }
+    throw lastError || new Error('Erro desconhecido ao conectar com o servidor.');
   };
 
   const [isRetrying, setIsRetrying] = useState(false);
@@ -383,7 +386,7 @@ export default function App() {
 
   const filteredVolunteers = volunteers
     .filter(v => v.service_id === selectedServiceId)
-    .filter(v => v.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    .filter(v => (v.name || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
   const currentService = services.find(s => s.id === selectedServiceId);
 
@@ -392,7 +395,7 @@ export default function App() {
 
     const doc = new jsPDF();
     const dateStr = safeFormat(currentService.date, "dd/MM/yyyy");
-    const volunteersList = filteredVolunteers.map((v, i) => [i + 1, v.name, safeFormat(v.created_at, "HH:mm")]);
+    const volunteersList = filteredVolunteers.map((v, i) => [i + 1, v.name || 'Voluntário', safeFormat(v.created_at, "HH:mm")]);
 
     // Header
     doc.setFontSize(20);
@@ -435,15 +438,19 @@ export default function App() {
   };
 
   const getInitials = (name: string) => {
+    if (!name) return '?';
     return name
-      .split(' ')
+      .trim()
+      .split(/\s+/)
+      .filter(n => n.length > 0)
       .map(n => n[0])
       .slice(0, 2)
       .join('')
-      .toUpperCase();
+      .toUpperCase() || '?';
   };
 
   const getAvatarColor = (name: string) => {
+    if (!name) return 'bg-stone-500';
     const colors = [
       'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 
       'bg-amber-500', 'bg-rose-500', 'bg-indigo-500',
@@ -792,7 +799,7 @@ export default function App() {
                     <div className="w-full h-1.5 bg-stone-800 rounded-full mb-6 overflow-hidden">
                       <motion.div 
                         initial={{ width: 0 }}
-                        animate={{ width: `${Math.min((count / s.capacity) * 100, 100)}%` }}
+                        animate={{ width: `${Math.min((count / (s.capacity || 1)) * 100, 100)}%` }}
                         className={`h-full rounded-full transition-all duration-1000 ${
                           count >= s.capacity ? 'bg-red-500' : count >= s.capacity * 0.8 ? 'bg-amber-500' : 'bg-blue-500'
                         }`}
@@ -927,7 +934,7 @@ export default function App() {
                           </div>
                           <div>
                             <div className="font-bold text-stone-100 flex items-center gap-2">
-                              {v.name}
+                              {v.name || 'Voluntário'}
                               {myRegistrationIds.includes(v.id) && (
                                 <CheckCircle2 className="w-4 h-4 text-blue-500" />
                               )}
