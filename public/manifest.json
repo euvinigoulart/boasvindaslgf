@@ -8,15 +8,15 @@
   "theme_color": "#0c0a09",
   "icons": [
     {
-      "src": "https://i.ibb.co/PZwVw9jN/images.jpg",
+      "src": "https://picsum.photos/seed/lgf/192/192",
       "sizes": "192x192",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://i.ibb.co/PZwVw9jN/images.jpg",
+      "src": "https://picsum.photos/seed/lgf/512/512",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
