@@ -102,7 +102,21 @@ export default function App() {
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) {
+        toast('Para instalar no iPhone/iPad:\n1. Toque no ícone de Compartilhar (quadrado com seta)\n2. Role para baixo e toque em "Adicionar à Tela de Início"', {
+          duration: 6000,
+          icon: '📱'
+        });
+      } else {
+        toast('O aplicativo já está instalado ou seu navegador não suporta a instalação automática. Acesse as opções do navegador para instalar.', {
+          duration: 5000,
+          icon: 'ℹ️'
+        });
+      }
+      return;
+    }
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') {
@@ -481,16 +495,6 @@ export default function App() {
         </motion.div>
 
         <div className="flex items-center gap-4">
-          {deferredPrompt && (
-            <button 
-              onClick={handleInstallClick}
-              className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full shadow-lg shadow-blue-900/20 transition-all flex items-center gap-1.5"
-            >
-              <Download className="w-3 h-3" />
-              Instalar App
-            </button>
-          )}
-
           {!isAdmin && !showPasswordInput && (
             <button 
               onClick={() => setShowPasswordInput(true)}
@@ -1038,6 +1042,14 @@ export default function App() {
                   <Youtube className="w-6 h-6 group-hover:rotate-12 transition-transform" />
                   <span className="text-sm uppercase tracking-widest font-bold">Inscrever no YouTube</span>
                 </a>
+
+                <button 
+                  onClick={handleInstallClick}
+                  className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-full transition-all group shadow-2xl hover:scale-105 active:scale-95"
+                >
+                  <Download className="w-6 h-6 group-hover:bounce transition-transform" />
+                  <span className="text-sm uppercase tracking-widest font-bold">Instalar Aplicativo LGF</span>
+                </button>
               </div>
             </motion.div>
           </div>
