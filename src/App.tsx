@@ -119,7 +119,7 @@ export default function App() {
 
     const connectWebSocket = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}`;
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
       ws = new WebSocket(wsUrl);
 
       ws.onmessage = (event) => {
@@ -338,6 +338,65 @@ export default function App() {
     }
   };
 
+  const [modalConfig, setModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'confirm' | 'prompt';
+    defaultValue?: string;
+    onConfirm: (value?: string) => void;
+    onCancel: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'confirm',
+    onConfirm: () => {},
+    onCancel: () => {}
+  });
+
+  const [promptValue, setPromptValue] = useState('');
+
+  const confirmAction = (title: string, message: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setModalConfig({
+        isOpen: true,
+        title,
+        message,
+        type: 'confirm',
+        onConfirm: () => {
+          setModalConfig(prev => ({ ...prev, isOpen: false }));
+          resolve(true);
+        },
+        onCancel: () => {
+          setModalConfig(prev => ({ ...prev, isOpen: false }));
+          resolve(false);
+        }
+      });
+    });
+  };
+
+  const promptAction = (title: string, message: string, defaultValue: string = ''): Promise<string | null> => {
+    setPromptValue(defaultValue);
+    return new Promise((resolve) => {
+      setModalConfig({
+        isOpen: true,
+        title,
+        message,
+        type: 'prompt',
+        defaultValue,
+        onConfirm: (value) => {
+          setModalConfig(prev => ({ ...prev, isOpen: false }));
+          resolve(value || '');
+        },
+        onCancel: () => {
+          setModalConfig(prev => ({ ...prev, isOpen: false }));
+          resolve(null);
+        }
+      });
+    });
+  };
+
   const removeVolunteer = async (id: any) => {
     // Segurança adicional: verificar se o usuário tem permissão para excluir este ID
     if (!isAdmin && !myRegistrationIds.includes(id)) {
@@ -345,7 +404,9 @@ export default function App() {
       return;
     }
 
-    if (!window.confirm('Deseja realmente remover este nome da lista?')) return;
+    const confirmed = await confirmAction('Remover Inscrição', 'Deseja realmente remover este nome da lista?');
+    if (!confirmed) return;
+    
     try {
       await fetchApi(`/api/volunteers/${id}`, { method: 'DELETE' });
       setVolunteers(prev => prev.filter(v => v.id !== id));
@@ -357,7 +418,9 @@ export default function App() {
   };
 
   const removeService = async (id: number) => {
-    if (!window.confirm('Remover este culto e todos os seus voluntários?')) return;
+    const confirmed = await confirmAction('Remover Culto', 'Remover este culto e todos os seus voluntários?');
+    if (!confirmed) return;
+    
     try {
       await fetchApi(`/api/services/${id}`, { method: 'DELETE' });
       setServices(prev => prev.filter(s => s.id !== id));
@@ -369,8 +432,9 @@ export default function App() {
   };
 
   const updateCapacity = async (id: number, currentCapacity: number) => {
-    const newCap = prompt('Nova quantidade de vagas:', currentCapacity.toString());
+    const newCap = await promptAction('Atualizar Vagas', 'Nova quantidade de vagas:', currentCapacity.toString());
     if (newCap === null) return;
+    
     const capacity = parseInt(newCap);
     if (isNaN(capacity) || capacity < 1) {
       toast.error('Valor inválido');
@@ -1084,6 +1148,53 @@ export default function App() {
           © {new Date().getFullYear()} Igreja LGF — Ministério de Boas Vindas
         </p>
       </footer>
+
+      {/* Custom Modal */}
+      <AnimatePresence>
+        {modalConfig.isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-stone-900 border border-stone-800 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl"
+            >
+              <h3 className="text-xl font-serif font-bold text-white mb-2">{modalConfig.title}</h3>
+              <p className="text-stone-400 mb-6">{modalConfig.message}</p>
+              
+              {modalConfig.type === 'prompt' && (
+                <input
+                  type="number"
+                  value={promptValue}
+                  onChange={(e) => setPromptValue(e.target.value)}
+                  className="w-full bg-stone-800 border border-stone-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none mb-6"
+                  autoFocus
+                />
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={modalConfig.onCancel}
+                  className="px-6 py-3 rounded-xl font-bold text-stone-400 hover:text-white hover:bg-stone-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => modalConfig.onConfirm(modalConfig.type === 'prompt' ? promptValue : undefined)}
+                  className="px-6 py-3 rounded-xl font-bold bg-blue-600 text-white hover:bg-blue-500 transition-colors"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

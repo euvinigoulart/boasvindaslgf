@@ -15,7 +15,7 @@ const scriptUrl = process.env.GOOGLE_SCRIPT_URL || 'https://script.google.com/ma
 
 const app = express();
 const server = createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, path: '/ws' });
 
 app.use(express.json());
 
@@ -34,9 +34,19 @@ async function callScript(action: string, payload: any = {}) {
     throw new Error('GOOGLE_SCRIPT_URL não configurado. Verifique o arquivo .env');
   }
 
-  const response = await fetch(scriptUrl, {
-    method: 'POST',
-    body: JSON.stringify({ action, ...payload }),
+  const url = new URL(scriptUrl);
+  url.searchParams.append('action', action);
+  url.searchParams.append('_t', Date.now().toString());
+  
+  Object.keys(payload).forEach(key => {
+    if (payload[key] !== undefined && payload[key] !== null) {
+      url.searchParams.append(key, payload[key]);
+    }
+  });
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    redirect: 'follow'
   });
 
   if (!response.ok) {
