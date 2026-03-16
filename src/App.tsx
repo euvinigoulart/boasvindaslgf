@@ -114,14 +114,64 @@ export default function App() {
     fetchData();
     fetchVerse();
     
-    // Set up polling every 5 seconds for faster updates
+    let ws: WebSocket;
+    let reconnectTimer: NodeJS.Timeout;
+
+    const connectWebSocket = () => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          switch (data.type) {
+            case 'SERVICE_ADDED':
+              setServices(prev => {
+                if (prev.some(s => s.id === data.payload.id)) return prev;
+                return [...prev, data.payload].sort((a, b) => a.date.localeCompare(b.date));
+              });
+              break;
+            case 'SERVICE_REMOVED':
+              setServices(prev => prev.filter(s => s.id !== data.payload.id));
+              setVolunteers(prev => prev.filter(v => v.service_id !== data.payload.id));
+              break;
+            case 'SERVICE_UPDATED':
+              setServices(prev => prev.map(s => s.id === data.payload.id ? { ...s, capacity: data.payload.capacity } : s));
+              break;
+            case 'VOLUNTEER_ADDED':
+              setVolunteers(prev => {
+                if (prev.some(v => v.id === data.payload.id)) return prev;
+                return [data.payload, ...prev];
+              });
+              break;
+            case 'VOLUNTEER_REMOVED':
+              setVolunteers(prev => prev.filter(v => v.id !== data.payload.id));
+              break;
+          }
+          setLastUpdated(new Date());
+        } catch (e) {
+          console.error('WebSocket message error:', e);
+        }
+      };
+
+      ws.onclose = () => {
+        reconnectTimer = setTimeout(connectWebSocket, 2000);
+      };
+    };
+
+    connectWebSocket();
+
+    // Fallback slow polling
     const interval = setInterval(() => {
       fetchData(true); // silent fetch
       fetchVerse();    // check if verse needs update (day change)
-    }, 5000);
+    }, 30000);
 
     return () => {
       clearInterval(interval);
+      clearTimeout(reconnectTimer);
+      if (ws) ws.close();
     };
   }, []);
 
@@ -181,45 +231,14 @@ export default function App() {
     setVerse(dailyVerses[index]);
   };
 
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxin3v_CEMXweTsVG44Fo2J7Wzu9biukv8SGVavHuoKPVJGh5_OahRMRwXTQhR_smWn/exec';
-
-  // Improved fetch for Google Script with retry logic
-  const fetchFromScript = async (action: string, payload: any = {}, retries = 2) => {
-    const url = new URL(SCRIPT_URL);
-    url.searchParams.append('action', action);
-    url.searchParams.append('_t', Date.now().toString());
-    
-    Object.keys(payload).forEach(key => {
-      url.searchParams.append(key, payload[key]);
-    });
-    
-    for (let i = 0; i <= retries; i++) {
-      try {
-        const res = await fetch(url.toString(), {
-          method: 'GET',
-          cache: 'no-cache',
-          mode: 'cors',
-          redirect: 'follow'
-        });
-        
-        if (!res.ok) throw new Error(`Erro HTTP: ${res.status}`);
-        
-        const json = await res.json();
-        if (json.error) throw new Error(json.error);
-        return json.data;
-      } catch (e: any) {
-        console.error(`Tentativa ${i + 1} falhou:`, e);
-        if (i === retries) {
-          // Se for a última tentativa, lança o erro
-          if (e.message === 'Failed to fetch') {
-            throw new Error('Não foi possível conectar ao Google Script. Isso geralmente é causado por bloqueio de CORS ou o Script não estar publicado como "Qualquer pessoa".');
-          }
-          throw e;
-        }
-        // Espera um pouco antes de tentar novamente (backoff simples)
-        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
-      }
+  const fetchApi = async (url: string, options?: RequestInit) => {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || `Erro HTTP: ${res.status}`);
     }
+    if (res.status === 204) return null;
+    return res.json();
   };
 
   const [isRetrying, setIsRetrying] = useState(false);
@@ -228,8 +247,10 @@ export default function App() {
     if (!silent) setLoading(true);
     if (silent) setIsRetrying(true);
     try {
-      const servicesData = await fetchFromScript('getServices');
-      const volunteersData = await fetchFromScript('getVolunteers');
+      const [servicesData, volunteersData] = await Promise.all([
+        fetchApi('/api/services'),
+        fetchApi('/api/volunteers')
+      ]);
       
       setServices(servicesData);
       setVolunteers(volunteersData);
@@ -237,12 +258,7 @@ export default function App() {
     } catch (error: any) {
       console.error('Erro no fetchData:', error);
       if (!silent) {
-        const msg = error.message || 'Erro desconhecido';
-        if (msg.includes('Failed to fetch') || msg.includes('conectar ao Google Script')) {
-          toast.error('Falha na conexão: Verifique se o Google Script está publicado corretamente como "Qualquer pessoa".', { duration: 6000 });
-        } else {
-          toast.error(`Erro: ${msg}`);
-        }
+        toast.error(`Erro: ${error.message || 'Erro desconhecido'}`);
       }
     } finally {
       if (!silent) setLoading(false);
@@ -273,13 +289,20 @@ export default function App() {
 
     setIsSubmitting(true);
     try {
-      const newVolunteer = await fetchFromScript('addVolunteer', { name, service_id: selectedServiceId });
-      setVolunteers(prev => [newVolunteer, ...prev]);
+      const newVolunteer = await fetchApi('/api/volunteers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, service_id: selectedServiceId })
+      });
+      setVolunteers(prev => {
+        if (prev.some(v => v.id === newVolunteer.id)) return prev;
+        return [newVolunteer, ...prev];
+      });
       setMyRegistrationIds(prev => [...prev, newVolunteer.id]);
       setName('');
       toast.success('Inscrição realizada!');
-    } catch (error) {
-      toast.error('Erro ao realizar inscrição');
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao realizar inscrição');
     } finally {
       setIsSubmitting(false);
     }
@@ -291,18 +314,25 @@ export default function App() {
 
     setIsSubmitting(true);
     try {
-      const newService = await fetchFromScript('addService', { 
-        date: newServiceDate, 
-        capacity: newServiceCapacity,
-        description: newServiceDesc
+      const newService = await fetchApi('/api/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          date: newServiceDate, 
+          capacity: newServiceCapacity,
+          description: newServiceDesc
+        })
       });
-      setServices(prev => [...prev, newService].sort((a, b) => a.date.localeCompare(b.date)));
+      setServices(prev => {
+        if (prev.some(s => s.id === newService.id)) return prev;
+        return [...prev, newService].sort((a, b) => a.date.localeCompare(b.date));
+      });
       setNewServiceDate('');
       setNewServiceCapacity(10);
       setNewServiceDesc('');
       toast.success('Culto adicionado!');
-    } catch (error) {
-      toast.error('Erro ao adicionar culto');
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao adicionar culto');
     } finally {
       setIsSubmitting(false);
     }
@@ -317,24 +347,24 @@ export default function App() {
 
     if (!window.confirm('Deseja realmente remover este nome da lista?')) return;
     try {
-      await fetchFromScript('deleteVolunteer', { id });
+      await fetchApi(`/api/volunteers/${id}`, { method: 'DELETE' });
       setVolunteers(prev => prev.filter(v => v.id !== id));
       setMyRegistrationIds(prev => prev.filter(regId => regId !== id));
       toast.success('Removido com sucesso');
-    } catch (error) {
-      toast.error('Erro ao remover');
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao remover');
     }
   };
 
   const removeService = async (id: number) => {
     if (!window.confirm('Remover este culto e todos os seus voluntários?')) return;
     try {
-      await fetchFromScript('deleteService', { id });
+      await fetchApi(`/api/services/${id}`, { method: 'DELETE' });
       setServices(prev => prev.filter(s => s.id !== id));
       setVolunteers(prev => prev.filter(v => v.service_id !== id));
       toast.success('Culto removido');
-    } catch (error) {
-      toast.error('Erro ao remover culto');
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao remover culto');
     }
   };
 
@@ -347,11 +377,15 @@ export default function App() {
       return;
     }
     try {
-      await fetchFromScript('updateServiceCapacity', { id, capacity });
+      await fetchApi(`/api/services/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ capacity })
+      });
       setServices(prev => prev.map(s => s.id === id ? { ...s, capacity } : s));
       toast.success('Vagas atualizadas');
-    } catch (error) {
-      toast.error('Erro ao atualizar');
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao atualizar');
     }
   };
 
