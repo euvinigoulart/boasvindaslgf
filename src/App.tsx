@@ -92,86 +92,18 @@ export default function App() {
 
   const [verse, setVerse] = useState<{ text: string; reference: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-
-  useEffect(() => {
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    });
-  }, []);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-    }
-  };
 
   useEffect(() => {
     fetchData();
     fetchVerse();
     
-    let ws: WebSocket;
-    let reconnectTimer: NodeJS.Timeout;
-
-    const connectWebSocket = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
-      ws = new WebSocket(wsUrl);
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          switch (data.type) {
-            case 'SERVICE_ADDED':
-              setServices(prev => {
-                if (prev.some(s => s.id === data.payload.id)) return prev;
-                return [...prev, data.payload].sort((a, b) => a.date.localeCompare(b.date));
-              });
-              break;
-            case 'SERVICE_REMOVED':
-              setServices(prev => prev.filter(s => s.id !== data.payload.id));
-              setVolunteers(prev => prev.filter(v => v.service_id !== data.payload.id));
-              break;
-            case 'SERVICE_UPDATED':
-              setServices(prev => prev.map(s => s.id === data.payload.id ? { ...s, capacity: data.payload.capacity } : s));
-              break;
-            case 'VOLUNTEER_ADDED':
-              setVolunteers(prev => {
-                if (prev.some(v => v.id === data.payload.id)) return prev;
-                return [data.payload, ...prev];
-              });
-              break;
-            case 'VOLUNTEER_REMOVED':
-              setVolunteers(prev => prev.filter(v => v.id !== data.payload.id));
-              break;
-          }
-          setLastUpdated(new Date());
-        } catch (e) {
-          console.error('WebSocket message error:', e);
-        }
-      };
-
-      ws.onclose = () => {
-        reconnectTimer = setTimeout(connectWebSocket, 2000);
-      };
-    };
-
-    connectWebSocket();
-
-    // Fallback slow polling
     const interval = setInterval(() => {
       fetchData(true); // silent fetch
       fetchVerse();    // check if verse needs update (day change)
-    }, 30000);
+    }, 2000);
 
     return () => {
       clearInterval(interval);
-      clearTimeout(reconnectTimer);
-      if (ws) ws.close();
     };
   }, []);
 
@@ -579,6 +511,25 @@ export default function App() {
         </motion.div>
 
         <div className="flex items-center gap-4">
+          <button 
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/debug-connection');
+                const data = await res.json();
+                if (data.status === 'success') {
+                  toast.success(data.message);
+                } else {
+                  toast.error(data.message, { duration: 10000 });
+                }
+              } catch (e: any) {
+                toast.error('Erro ao testar conexão: ' + e.message);
+              }
+            }}
+            className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 hover:text-white/90 transition-colors"
+          >
+            Testar Conexão
+          </button>
+
           {!isAdmin && !showPasswordInput && (
             <button 
               onClick={() => setShowPasswordInput(true)}
@@ -1126,16 +1077,6 @@ export default function App() {
                   <Youtube className="w-6 h-6 group-hover:rotate-12 transition-transform" />
                   <span className="text-sm uppercase tracking-widest font-bold">Inscrever no YouTube</span>
                 </a>
-
-                {deferredPrompt && (
-                  <button 
-                    onClick={handleInstallClick}
-                    className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-full transition-all group shadow-2xl hover:scale-105 active:scale-95"
-                  >
-                    <Download className="w-6 h-6 group-hover:bounce transition-transform" />
-                    <span className="text-sm uppercase tracking-widest font-bold">Instalar Aplicativo LGF</span>
-                  </button>
-                )}
               </div>
             </motion.div>
           </div>

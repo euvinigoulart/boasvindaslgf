@@ -10,22 +10,10 @@
     <meta name="apple-mobile-web-app-title" content="LGF" />
     <link rel="icon" type="image/jpeg" href="https://i.ibb.co/PZwVw9jN/images.jpg" />
     <link rel="apple-touch-icon" href="https://i.ibb.co/PZwVw9jN/images.jpg" />
-    <link rel="manifest" href="/manifest.json" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').then(registration => {
-            console.log('SW registered: ', registration);
-          }).catch(registrationError => {
-            console.log('SW registration failed: ', registrationError);
-          });
-        });
-      }
-    </script>
   </body>
 </html>
 
