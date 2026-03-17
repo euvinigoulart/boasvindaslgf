@@ -163,14 +163,81 @@ export default function App() {
     setVerse(dailyVerses[index]);
   };
 
+  const scriptUrl = 'https://script.google.com/macros/s/AKfycbxin3v_CEMXweTsVG44Fo2J7Wzu9biukv8SGVavHuoKPVJGh5_OahRMRwXTQhR_smWn/exec';
+
   const fetchApi = async (url: string, options?: RequestInit) => {
-    const res = await fetch(url, options);
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || `Erro HTTP: ${res.status}`);
+    let action = '';
+    const payload: any = {};
+
+    const method = options?.method || 'GET';
+    const body = options?.body ? JSON.parse(options.body as string) : {};
+
+    if (url === '/api/services') {
+      if (method === 'GET') action = 'getServices';
+      if (method === 'POST') {
+        action = 'addService';
+        payload.date = body.date;
+        payload.capacity = body.capacity;
+        payload.description = body.description;
+      }
+    } else if (url.startsWith('/api/services/')) {
+      const id = url.split('/').pop();
+      if (method === 'DELETE') {
+        action = 'deleteService';
+        payload.id = id;
+      }
+      if (method === 'PATCH') {
+        action = 'updateServiceCapacity';
+        payload.id = id;
+        payload.capacity = body.capacity;
+      }
+    } else if (url === '/api/volunteers') {
+      if (method === 'GET') action = 'getVolunteers';
+      if (method === 'POST') {
+        action = 'addVolunteer';
+        payload.name = body.name;
+        payload.service_id = body.service_id;
+      }
+    } else if (url.startsWith('/api/volunteers/')) {
+      const id = url.split('/').pop();
+      if (method === 'DELETE') {
+        action = 'deleteVolunteer';
+        payload.id = id;
+      }
     }
-    if (res.status === 204) return null;
-    return res.json();
+
+    const scriptUrlWithParams = new URL(scriptUrl);
+    scriptUrlWithParams.searchParams.append('action', action);
+    scriptUrlWithParams.searchParams.append('_t', Date.now().toString());
+    
+    Object.keys(payload).forEach(key => {
+      if (payload[key] !== undefined && payload[key] !== null) {
+        scriptUrlWithParams.searchParams.append(key, payload[key]);
+      }
+    });
+
+    const res = await fetch(scriptUrlWithParams.toString(), {
+      method: 'GET',
+      redirect: 'follow'
+    });
+
+    if (!res.ok) {
+      throw new Error(`Erro HTTP: ${res.status}`);
+    }
+
+    const text = await res.text();
+    try {
+      const result = JSON.parse(text);
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      return result.data;
+    } catch (e) {
+      if (text.toLowerCase().includes('<!doctype html>') || text.includes('<html')) {
+        throw new Error('O Google retornou uma página HTML. Verifique a implantação.');
+      }
+      throw new Error(`Erro ao ler resposta do Google: ${text.substring(0, 100)}`);
+    }
   };
 
   const [isRetrying, setIsRetrying] = useState(false);
@@ -514,15 +581,10 @@ export default function App() {
           <button 
             onClick={async () => {
               try {
-                const res = await fetch('/api/debug-connection');
-                const data = await res.json();
-                if (data.status === 'success') {
-                  toast.success(data.message);
-                } else {
-                  toast.error(data.message, { duration: 10000 });
-                }
+                await fetchApi('/api/services');
+                toast.success('Conexão com o Google Apps Script estabelecida com sucesso!');
               } catch (e: any) {
-                toast.error('Erro ao testar conexão: ' + e.message);
+                toast.error('Erro ao testar conexão: ' + e.message, { duration: 10000 });
               }
             }}
             className="text-[10px] uppercase tracking-[0.2em] font-bold text-white/40 hover:text-white/90 transition-colors"
