@@ -22,9 +22,16 @@ interface Volunteer {
   created_at: string;
 }
 
+interface Birthday {
+  id: number;
+  name: string;
+  birthdate: string;
+}
+
 export default function App() {
   const [services, setServices] = useState<Service[]>([]);
   const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [birthdays, setBirthdays] = useState<Birthday[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState<number | null>(() => {
     const saved = localStorage.getItem('lgf_selected_service_id');
     return saved ? parseInt(saved) : null;
@@ -92,6 +99,10 @@ export default function App() {
 
   const [verse, setVerse] = useState<{ text: string; reference: string } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Birthday form states
+  const [birthdayName, setBirthdayName] = useState('');
+  const [birthdayDate, setBirthdayDate] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -204,6 +215,19 @@ export default function App() {
         action = 'deleteVolunteer';
         payload.id = id;
       }
+    } else if (url === '/api/birthdays') {
+      if (method === 'GET') action = 'getBirthdays';
+      if (method === 'POST') {
+        action = 'addBirthday';
+        payload.name = body.name;
+        payload.birthdate = body.birthdate;
+      }
+    } else if (url.startsWith('/api/birthdays/')) {
+      const id = url.split('/').pop();
+      if (method === 'DELETE') {
+        action = 'deleteBirthday';
+        payload.id = id;
+      }
     }
 
     const scriptUrlWithParams = new URL(scriptUrl);
@@ -246,13 +270,15 @@ export default function App() {
     if (!silent) setLoading(true);
     if (silent) setIsRetrying(true);
     try {
-      const [servicesData, volunteersData] = await Promise.all([
+      const [servicesData, volunteersData, birthdaysData] = await Promise.all([
         fetchApi('/api/services'),
-        fetchApi('/api/volunteers')
+        fetchApi('/api/volunteers'),
+        fetchApi('/api/birthdays')
       ]);
       
       setServices(servicesData);
       setVolunteers(volunteersData);
+      setBirthdays(birthdaysData || []);
       setLastUpdated(new Date());
     } catch (error: any) {
       console.error('Erro no fetchData:', error);
@@ -334,6 +360,44 @@ export default function App() {
       toast.error(error.message || 'Erro ao adicionar culto');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleBirthdaySubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!birthdayName.trim() || !birthdayDate || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const newBirthday = await fetchApi('/api/birthdays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name: birthdayName, 
+          birthdate: birthdayDate
+        })
+      });
+      setBirthdays(prev => [...prev, newBirthday]);
+      setBirthdayName('');
+      setBirthdayDate('');
+      toast.success('Aniversariante cadastrado com sucesso!');
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao cadastrar aniversariante');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const removeBirthday = async (id: number) => {
+    const confirmed = await confirmAction('Remover Aniversariante', 'Deseja realmente remover este aniversariante?');
+    if (!confirmed) return;
+    
+    try {
+      await fetchApi(`/api/birthdays/${id}`, { method: 'DELETE' });
+      setBirthdays(prev => prev.filter(b => b.id !== id));
+      toast.success('Aniversariante removido');
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao remover');
     }
   };
 
@@ -542,6 +606,31 @@ export default function App() {
   const getVolunteerCount = (serviceId: number) => {
     return volunteers.filter(v => v.service_id === serviceId).length;
   };
+
+  const getUpcomingBirthdays = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return birthdays
+      .map(b => {
+        // Handle possible date formats from Google Sheets
+        const bDate = new Date(b.birthdate.includes('T') ? b.birthdate : b.birthdate + 'T12:00:00');
+        let nextBirthday = new Date(today.getFullYear(), bDate.getMonth(), bDate.getDate());
+        
+        if (nextBirthday < today) {
+          nextBirthday.setFullYear(today.getFullYear() + 1);
+        }
+        
+        const diffTime = Math.abs(nextBirthday.getTime() - today.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        return { ...b, nextBirthday, diffDays, originalDate: bDate };
+      })
+      .filter(b => b.diffDays <= 30) // Upcoming in the next 30 days
+      .sort((a, b) => a.diffDays - b.diffDays);
+  };
+
+  const upcomingBirthdays = getUpcomingBirthdays();
 
   return (
     <div className="min-h-screen pb-12">
@@ -1142,6 +1231,132 @@ export default function App() {
               </div>
             </motion.div>
           </div>
+        </div>
+
+        {/* Birthdays Section */}
+        <div className="mt-16 grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div className="lg:col-span-4 space-y-6">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="bg-stone-900 rounded-[2.5rem] p-8 md:p-10 border border-stone-800 shadow-xl"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <Heart className="w-6 h-6 text-rose-500" />
+                <h2 className="text-xl font-serif font-bold text-white">Aniversariantes</h2>
+              </div>
+              <p className="text-sm text-stone-400 mb-6">Cadastre sua data de nascimento para celebrarmos com você!</p>
+              
+              <form onSubmit={handleBirthdaySubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">Seu Nome Completo</label>
+                  <input
+                    type="text"
+                    value={birthdayName}
+                    onChange={(e) => setBirthdayName(e.target.value)}
+                    placeholder="Ex: João Silva"
+                    className="w-full px-4 py-3 rounded-xl border border-stone-700 focus:ring-2 focus:ring-rose-500 outline-none transition-all bg-stone-800 text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">Data de Nascimento</label>
+                  <input
+                    type="date"
+                    value={birthdayDate}
+                    onChange={(e) => setBirthdayDate(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-stone-700 focus:ring-2 focus:ring-rose-500 outline-none transition-all bg-stone-800 text-white"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full bg-rose-600 text-white py-4 rounded-xl font-semibold hover:bg-rose-500 disabled:bg-stone-800 disabled:text-stone-500 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 group shadow-lg shadow-rose-900/20"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    'Cadastrar Aniversário'
+                  )}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+          
+          {isAdmin && (
+            <div className="lg:col-span-8 space-y-6">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="bg-stone-900/80 backdrop-blur-md rounded-[3rem] p-8 md:p-12 shadow-2xl border border-stone-800 relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 w-64 h-64 bg-rose-500/5 rounded-full blur-3xl -mr-32 -mt-32 opacity-50" />
+                
+                <div className="relative z-10">
+                  <div className="flex items-center gap-3 mb-8">
+                    <div className="p-2 bg-rose-900/30 rounded-xl">
+                      <Calendar className="w-6 h-6 text-rose-400" />
+                    </div>
+                    <h2 className="text-3xl font-serif font-bold text-white">Próximos Aniversariantes</h2>
+                  </div>
+                  
+                  {upcomingBirthdays.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+                      {upcomingBirthdays.map((b) => (
+                        <div key={b.id} className="bg-rose-900/20 border border-rose-500/30 rounded-[2rem] p-5 flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs font-bold shadow-inner">
+                              {getInitials(b.name)}
+                            </div>
+                            <div>
+                              <div className="font-bold text-white">{b.name}</div>
+                              <div className="text-[10px] font-bold uppercase tracking-wider text-rose-400">
+                                {b.diffDays === 0 ? 'Hoje!' : `Faltam ${b.diffDays} dias`} ({format(b.nextBirthday, 'dd/MM')})
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-stone-400 text-sm mb-10 italic">Nenhum aniversariante nos próximos 30 dias.</p>
+                  )}
+
+                  <h3 className="text-xl font-serif font-bold text-white mb-6 border-t border-stone-800 pt-8">Todos os Cadastros</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {birthdays.map((b) => (
+                      <div key={b.id} className="group flex items-center justify-between p-5 rounded-[2rem] border bg-stone-800/30 border-stone-800 hover:bg-stone-800 hover:border-stone-700 transition-all">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-inner ${getAvatarColor(b.name)}`}>
+                            {getInitials(b.name)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-stone-100">{b.name}</div>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                              Nasc: {safeFormat(b.birthdate, 'dd/MM/yyyy')}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeBirthday(b.id)}
+                          className="p-2 rounded-full transition-all text-stone-600 hover:text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100"
+                          title="Remover"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
         </div>
       </main>
 
