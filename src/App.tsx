@@ -103,6 +103,7 @@ export default function App() {
   // Birthday form states
   const [birthdayName, setBirthdayName] = useState('');
   const [birthdayDate, setBirthdayDate] = useState('');
+  const [isBirthdaySuccess, setIsBirthdaySuccess] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -380,6 +381,7 @@ export default function App() {
       setBirthdays(prev => [...prev, newBirthday]);
       setBirthdayName('');
       setBirthdayDate('');
+      setIsBirthdaySuccess(true);
       toast.success('Aniversariante cadastrado com sucesso!');
     } catch (error: any) {
       toast.error(error.message || 'Erro ao cadastrar aniversariante');
@@ -581,6 +583,70 @@ export default function App() {
     toast.success('PDF gerado com sucesso!');
   };
 
+  const exportBirthdaysPDF = () => {
+    if (birthdays.length === 0) {
+      toast.error('Não há aniversariantes para exportar');
+      return;
+    }
+
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(225, 29, 72); // Rose-600
+    doc.text('Ministério de Boas Vindas', 14, 22);
+    
+    doc.setFontSize(14);
+    doc.setTextColor(100);
+    doc.text(`Lista de Aniversariantes`, 14, 32);
+    
+    // Sort birthdays by month and day
+    const sortedBirthdays = [...birthdays]
+      .filter(b => b && b.birthdate)
+      .map(b => {
+        const bDate = new Date(b.birthdate.includes('T') ? b.birthdate : b.birthdate + 'T12:00:00');
+        return { ...b, parsedDate: bDate };
+      })
+      .filter(b => !isNaN(b.parsedDate.getTime()))
+      .sort((a, b) => {
+        if (a.parsedDate.getMonth() !== b.parsedDate.getMonth()) {
+          return a.parsedDate.getMonth() - b.parsedDate.getMonth();
+        }
+        return a.parsedDate.getDate() - b.parsedDate.getDate();
+      });
+
+    const tableData = sortedBirthdays.map(b => [
+      b.name,
+      format(b.parsedDate, 'dd/MM/yyyy')
+    ]);
+
+    // Table
+    autoTable(doc, {
+      startY: 45,
+      head: [['Nome', 'Data de Nascimento']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [225, 29, 72] }, // Rose-600
+      styles: { fontSize: 10, cellPadding: 3 },
+    });
+
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(
+        `Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")} - Página ${i} de ${pageCount}`,
+        14,
+        doc.internal.pageSize.getHeight() - 10
+      );
+    }
+
+    doc.save(`aniversariantes_lgf.pdf`);
+    toast.success('PDF gerado com sucesso!');
+  };
+
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -612,9 +678,14 @@ export default function App() {
     today.setHours(0, 0, 0, 0);
 
     return birthdays
+      .filter(b => b && typeof b.birthdate === 'string' && b.birthdate.trim() !== '')
       .map(b => {
         // Handle possible date formats from Google Sheets
-        const bDate = new Date(b.birthdate.includes('T') ? b.birthdate : b.birthdate + 'T12:00:00');
+        const birthdateStr = String(b.birthdate);
+        const bDate = new Date(birthdateStr.includes('T') ? birthdateStr : birthdateStr + 'T12:00:00');
+        
+        if (isNaN(bDate.getTime())) return null;
+
         let nextBirthday = new Date(today.getFullYear(), bDate.getMonth(), bDate.getDate());
         
         if (nextBirthday < today) {
@@ -626,7 +697,7 @@ export default function App() {
         
         return { ...b, nextBirthday, diffDays, originalDate: bDate };
       })
-      .filter(b => b.diffDays <= 30) // Upcoming in the next 30 days
+      .filter((b): b is NonNullable<typeof b> => b !== null && b.diffDays <= 30)
       .sort((a, b) => a.diffDays - b.diffDays);
   };
 
@@ -1248,43 +1319,59 @@ export default function App() {
               </div>
               <p className="text-sm text-stone-400 mb-6">Cadastre sua data de nascimento para celebrarmos com você!</p>
               
-              <form onSubmit={handleBirthdaySubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">Seu Nome Completo</label>
-                  <input
-                    type="text"
-                    value={birthdayName}
-                    onChange={(e) => setBirthdayName(e.target.value)}
-                    placeholder="Ex: João Silva"
-                    className="w-full px-4 py-3 rounded-xl border border-stone-700 focus:ring-2 focus:ring-rose-500 outline-none transition-all bg-stone-800 text-white"
-                    required
-                  />
+              {isBirthdaySuccess ? (
+                <div className="flex flex-col items-center justify-center text-center py-6 space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-rose-900/30 flex items-center justify-center">
+                    <Heart className="w-8 h-8 text-rose-500 fill-rose-500" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white">Cadastro Concluído!</h3>
+                  <p className="text-stone-400 text-sm">Sua data de nascimento foi salva com sucesso. Obrigado por compartilhar conosco!</p>
+                  <button
+                    onClick={() => setIsBirthdaySuccess(false)}
+                    className="mt-4 px-6 py-2 bg-stone-800 hover:bg-stone-700 text-white rounded-xl text-sm font-semibold transition-all"
+                  >
+                    Cadastrar outro
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">Data de Nascimento</label>
-                  <input
-                    type="date"
-                    value={birthdayDate}
-                    onChange={(e) => setBirthdayDate(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-stone-700 focus:ring-2 focus:ring-rose-500 outline-none transition-all bg-stone-800 text-white"
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-rose-600 text-white py-4 rounded-xl font-semibold hover:bg-rose-500 disabled:bg-stone-800 disabled:text-stone-500 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 group shadow-lg shadow-rose-900/20"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Enviando...
-                    </>
-                  ) : (
-                    'Cadastrar Aniversário'
-                  )}
-                </button>
-              </form>
+              ) : (
+                <form onSubmit={handleBirthdaySubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">Seu Nome Completo</label>
+                    <input
+                      type="text"
+                      value={birthdayName}
+                      onChange={(e) => setBirthdayName(e.target.value)}
+                      placeholder="Ex: João Silva"
+                      className="w-full px-4 py-3 rounded-xl border border-stone-700 focus:ring-2 focus:ring-rose-500 outline-none transition-all bg-stone-800 text-white"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">Data de Nascimento</label>
+                    <input
+                      type="date"
+                      value={birthdayDate}
+                      onChange={(e) => setBirthdayDate(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl border border-stone-700 focus:ring-2 focus:ring-rose-500 outline-none transition-all bg-stone-800 text-white"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full bg-rose-600 text-white py-4 rounded-xl font-semibold hover:bg-rose-500 disabled:bg-stone-800 disabled:text-stone-500 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 group shadow-lg shadow-rose-900/20"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Enviando...
+                      </>
+                    ) : (
+                      'Cadastrar Aniversário'
+                    )}
+                  </button>
+                </form>
+              )}
             </motion.div>
           </div>
           
@@ -1328,7 +1415,16 @@ export default function App() {
                     <p className="text-stone-400 text-sm mb-10 italic">Nenhum aniversariante nos próximos 30 dias.</p>
                   )}
 
-                  <h3 className="text-xl font-serif font-bold text-white mb-6 border-t border-stone-800 pt-8">Todos os Cadastros</h3>
+                  <div className="flex items-center justify-between mb-6 border-t border-stone-800 pt-8">
+                    <h3 className="text-xl font-serif font-bold text-white">Todos os Cadastros</h3>
+                    <button
+                      onClick={exportBirthdaysPDF}
+                      className="flex items-center gap-2 px-4 py-2 bg-rose-900/40 text-rose-300 rounded-xl hover:bg-rose-900/60 transition-all font-semibold text-sm border border-rose-500/20"
+                    >
+                      <Download className="w-4 h-4" />
+                      Gerar PDF
+                    </button>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {birthdays.map((b) => (
                       <div key={b.id} className="group flex items-center justify-between p-5 rounded-[2rem] border bg-stone-800/30 border-stone-800 hover:bg-stone-800 hover:border-stone-700 transition-all">
