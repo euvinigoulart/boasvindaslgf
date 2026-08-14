@@ -175,7 +175,7 @@ export default function App() {
     setVerse(dailyVerses[index]);
   };
 
-  const scriptUrl = 'https://script.google.com/macros/s/AKfycbxin3v_CEMXweTsVG44Fo2J7Wzu9biukv8SGVavHuoKPVJGh5_OahRMRwXTQhR_smWn/exec';
+  const scriptUrl = 'https://script.google.com/macros/s/AKfycbzjSq7S2S7FLJtxFNY5aA-IN56GoSpATvawKm03Gu2QL9wiNakruNz9fEVqDWzoLBLH/exec';
 
   const fetchApi = async (url: string, options?: RequestInit) => {
     let action = '';
@@ -368,6 +368,15 @@ export default function App() {
     e.preventDefault();
     if (!birthdayName.trim() || !birthdayDate || isSubmitting) return;
 
+    const isDuplicate = birthdays.some(b => 
+      b.name.trim().toLowerCase() === birthdayName.trim().toLowerCase()
+    );
+
+    if (isDuplicate) {
+      toast.error('Este nome já está cadastrado nos aniversariantes');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const newBirthday = await fetchApi('/api/birthdays', {
@@ -378,7 +387,10 @@ export default function App() {
           birthdate: birthdayDate
         })
       });
-      setBirthdays(prev => [...prev, newBirthday]);
+      setBirthdays(prev => {
+        if (prev.some(b => b.id === newBirthday.id)) return prev;
+        return [newBirthday, ...prev];
+      });
       setBirthdayName('');
       setBirthdayDate('');
       setIsBirthdaySuccess(true);
@@ -1441,7 +1453,7 @@ export default function App() {
                         </div>
                         <button
                           onClick={() => removeBirthday(b.id)}
-                          className="p-2 rounded-full transition-all text-stone-600 hover:text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100"
+                          className="p-2 rounded-full transition-all text-stone-500 hover:text-red-400 hover:bg-red-900/30"
                           title="Remover"
                         >
                           <Trash2 className="w-4 h-4" />
